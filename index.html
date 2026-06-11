@@ -30,7 +30,7 @@ const fx = fogC.getContext('2d');
 // portrait phones get a tall narrow view — everything renders bigger & clearer
 function computeView(){
   const ar = innerWidth/Math.max(1,innerHeight);
-  if(ar < 1){ VW=320; VH=Math.max(420, Math.min(620, Math.round(320/ar))); }
+  if(ar < 1){ VW=280; VH=Math.max(400, Math.min(640, Math.round(280/ar))); }
   else      { VW=480; VH=270; }
   cv.width=VW*PIX; cv.height=VH*PIX;
   cx.imageSmoothingEnabled=false;
@@ -39,7 +39,7 @@ function computeView(){
 function fit(){
   computeView();
   let s = Math.min(innerWidth/VW, innerHeight/VH);
-  if(s>=1) s=Math.floor(s);          // integer scale on desktop, fractional on phones
+  if(s>=2) s=Math.floor(s);   // crisp integer scale on big screens, full-bleed fractional on phones
   cv.style.width = VW*s+'px'; cv.style.height = VH*s+'px';
 }
 addEventListener('resize', fit);
@@ -440,10 +440,18 @@ function setTempo(bpm){
   beatTimer=setInterval(beat, 60000/bpm/4);    // 16th notes
 }
 function audioInit(){
-  if(AC) return;
+  if(AC){
+    if(AC.state==='suspended') AC.resume();   // iOS Safari suspends until a gesture
+    return;
+  }
   AC = new (window.AudioContext||window.webkitAudioContext)();
+  if(AC.state==='suspended') AC.resume();
   setTempo((G.stage||1)>=FINAL_STAGE?190:TEMPOS[((G.stage||1)-1)%3]);
 }
+// Safari also suspends audio when the tab is backgrounded — wake it on return
+document.addEventListener('visibilitychange',()=>{
+  if(!document.hidden && AC && AC.state==='suspended') AC.resume();
+});
 // 2-bar acid bassline (semitones; null = rest)
 const BASSLINE=[0,null,0,12, null,0,10,null, 0,12,null,0, 3,null,15,12,
                 0,null,0,12, null,0,10,null, 7,12,null,5, 3,null,12,10];
@@ -1503,7 +1511,7 @@ function renderHUD(){
       cx.strokeStyle='#ffffff55'; cx.lineWidth=1; cx.strokeRect(b.x+0.5,b.y+0.5,b.w-1,b.h-1);
       const cxm=b.x+b.w/2, cym=b.y+b.h/2;
       cx.fillStyle=on?'#ffffff':'#ffffffbb';
-      cx.beginPath(); cx.moveTo(cxm+9*d,cym-14); cx.lineTo(cxm+9*d,cym+14); cx.lineTo(cxm-13*d,cym);
+      cx.beginPath(); cx.moveTo(cxm-9*d,cym-14); cx.lineTo(cxm-9*d,cym+14); cx.lineTo(cxm+13*d,cym);
       cx.closePath(); cx.fill();
     });
   } else {
@@ -1550,7 +1558,7 @@ function renderSelect(){
   txt(CHARS[G.charIdx].name, VW/2, ty, 13, CHARS[G.charIdx].glow,'center');
   txt(TOUCH?'TAP A RAVER TO CHOOSE':'← → ↑ ↓ CHOOSE YOUR RAVER', VW/2, ty+20, 9, '#fff','center');
   if(Math.floor(G.t*2)%2) txt(TOUCH?'TAP BELOW TO RAVE':'PRESS ENTER / CLICK TO RAVE', VW/2, ty+36, 11, '#39ff14','center');
-  txt('walls & crowds scatter half your crew · alone + hit = game over', VW/2, VH-14, 8, '#ffffff99','center');
+  txt('walls & crowds scatter half your crew · alone + hit = game over', VW/2, VH-14, VW<420?7:8, '#ffffff99','center');
 }
 
 function renderCutscene(){
@@ -1657,7 +1665,7 @@ function renderGameOver(){
     txt("YOUR FRIENDS!", VW/2, cy-49, 22, '#ff4f4f','center');
     if(gameOverInfo) txt(`you ${gameOverInfo.what} while flying solo`, VW/2, cy-15, 10, '#ffffffcc','center');
   }
-  if(gameOverInfo) txt(`stages reached: ${gameOverInfo.stage}   friends found: ${gameOverInfo.total}`, VW/2, cy+5, 10, '#2de2e6','center');
+  if(gameOverInfo) txt(`stages reached: ${gameOverInfo.stage}   friends found: ${gameOverInfo.total}`, VW/2, cy+5, VW<420?8:10, '#2de2e6','center');
   if(Math.floor(G.t*2)%2) txt(TOUCH?'TAP TO HEAD BACK TO THE GATES':'PRESS SPACE TO HEAD BACK TO THE GATES', VW/2, cy+45, 9, '#39ff14','center');
 }
 
@@ -1682,9 +1690,10 @@ function renderWin(){
     const wx=Math.min(bx,VW+120)-31+i*16, wy=VH/2+44-23*1.8+Math.sin(G.t*6+i)*1.5;
     cx.fillStyle=CHARS[i%CHARS.length].hair; cx.fillRect(wx,wy+18,6,4);
   }
-  txt('YOU CAUGHT THE LAST SHUTTLE!', VW/2, VH/2-99, 18, '#39ff14','center');
+  const nw=VW<420;
+  txt('YOU CAUGHT THE LAST SHUTTLE!', VW/2, VH/2-99, nw?13:18, '#39ff14','center');
   txt('kick ons at your hotel!!', VW/2, VH/2-73, 11, '#2de2e6','center');
-  txt(`crew on the bus: ${winCrew}   friends found all night: ${G.totalCollected}`, VW/2, VH/2-49, 10, '#f5d300','center');
+  txt(`crew on the bus: ${winCrew}   friends found all night: ${G.totalCollected}`, VW/2, VH/2-49, nw?8:10, '#f5d300','center');
   txt('THANKS FOR RAVING', VW/2, VH/2+80, 9, '#ffffff88','center');
   if(Math.floor(G.t*2)%2) txt(TOUCH?'TAP FOR ONE MORE RAVE':'PRESS SPACE FOR ONE MORE RAVE', VW/2, VH/2+100, 10, '#fff','center');
 }
