@@ -2131,15 +2131,13 @@ function renderWin(){
   drawBus(0,0,winPals);
   cx.restore();
   // roll-call trailing behind the bus as it drives by
-  txt('THESE RAVERS MADE IT ON THE BUS', VW/2, VH/2+12, 9, '#2de2e6','center');
   for(let i=0;i<winNames.length;i++){
     const nx=headX-80-i*58;
     if(nx<-50||nx>VW+60) continue;
     const ny=VH/2+50+(i%2?10:-1)+Math.sin(G.t*4+i)*1.5;
     txt(winNames[i], nx, ny, 9, ['#39ff14','#ff2d95','#00e5ff','#f5d300'][i%4],'center');
   }
-  if(winPals.length>4)
-    txt(`+${winPals.length-4} more partying in the back`, VW/2, VH/2-31, 8, '#ffffffaa','center');
+  txt('RAVERS WHO MADE IT ON THE BUS', VW/2, VH/2-31, 9, '#2de2e6','center');
   const nw=VW<420;
   txtT('YOU CAUGHT', VW/2, VH/2-118, nw?14:18, '#39ff14','center');
   txtT('THE LAST SHUTTLE!', VW/2, VH/2-96, nw?14:18, '#39ff14','center');
