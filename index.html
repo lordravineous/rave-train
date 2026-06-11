@@ -219,13 +219,14 @@ function shade(hex,amt){ // darken toward fog purple
 
 // ---------- totems ----------
 const TOTEMS = [
- {id:'sober', name:'SOBER FRIEND',  col:'#39ff14', dur:25, msg:'They know the way!'},
- {id:'glow',  name:'FAMILY PHOTO',  col:'#f5d300', dur:20, msg:"They've turned on the lights!"},
- {id:'bass',  name:'BODY ODOUR',    col:'#a3e635', dur:15, msg:'You smell! The crowd backs off.'},
- {id:'torch', name:'FLASHLIGHT',    col:'#ff6d00', dur:18, msg:'A cone of light!'},
- {id:'signal',name:'PHONE SIGNAL',  col:'#b14aed', dur:25, msg:'Full bars! Check the map!'},
- {id:'mum',   name:'RAVE MUM',      col:'#ff8fab', dur:8,  msg:'Invincibility! Everything is going to be okay.'},
- {id:'flag',  name:'SQUAD FLAG',    col:'#ffffff', dur:12, msg:'Raise it high! Your mates are coming!'},
+ {id:'sober', name:'SOBER FRIEND',  col:'#39ff14', dur:25, msg:'Look I see them!'},
+ {id:'glow',  name:'SHOULDER RIDE', col:'#f5d300', dur:20, msg:'You can see everything!'},
+ {id:'bass',  name:'FESTIVAL BO',   col:'#a3e635', dur:15, msg:'You smell! The crowd backs off!'},
+ {id:'torch', name:'PHONE TORCH',   col:'#ff6d00', dur:18, msg:'Your pupils are huge lmao'},
+ {id:'signal',name:'FULL BARS',     col:'#b14aed', dur:25, msg:'Maps is working again!'},
+ {id:'mum',   name:'RAVE MUM',      col:'#ff8fab', dur:8,  msg:'You are safe. Everything is going to be okay'},
+ {id:'flag',  name:'SQUAD FLAG',    col:'#ffffff', dur:12, msg:'Raise it so they can find you!'},
+ {id:'shield',name:'HYDRATION PACK',col:'#00e5ff', dur:0,  msg:'Water is life!'},
 ];
 function drawTotemIcon(g,x,y,id){
   g.save(); g.translate(Math.round(x),Math.round(y));
@@ -238,6 +239,7 @@ function drawTotemIcon(g,x,y,id){
     case 'torch': p(-3,-3,7,7,'#2b1502'); p(-3,0,3,2,'#999'); p(0,-1,2,4,'#ccc'); p(2,-2,2,5,'#ffe28a'); break;
     case 'signal':p(-3,-3,7,7,'#1d1030'); p(-3,-2,3,5,'#ddd'); p(-2,-1,1,3,'#9be7ff'); p(1,1,1,1,'#39ff14'); p(2,0,1,2,'#39ff14'); p(3,-1,1,3,'#39ff14'); break;
     case 'mum':   p(-3,-3,7,7,'#2a0a14'); p(-2,-2,2,2,'#ff8fab'); p(1,-2,2,2,'#ff8fab'); p(-3,-1,7,1,'#ff8fab'); p(-2,0,5,1,'#ff8fab'); p(-1,1,3,1,'#ff8fab'); p(0,2,1,1,'#ff8fab'); break;
+    case 'shield':p(-3,-3,7,7,'#02222e'); p(-1,-3,2,2,'#00e5ff'); p(-2,-1,4,3,'#00e5ff'); p(-1,2,2,1,'#00e5ff'); p(-1,0,1,1,'#bdf6ff'); break;
     case 'flag':  p(-3,-3,7,7,'#1a1426'); p(-2,-3,1,7,'#c9b78a'); p(-1,-3,5,2,'#ffffff'); p(-1,-1,4,1,'#ff2d95'); break;
   }
   g.restore();
@@ -281,8 +283,8 @@ function drawBaggy(b){
 }
 
 // ---------- stage names ----------
-const STAGE_NAMES = ['SUNRISE GATES','MAIN STAGE','BASS TENT','TECHNO DOME',
-  'JUNGLE ARENA','HARDSTYLE HANGAR','TRANCE TEMPLE','THE LAST SHUTTLE'];
+const STAGE_NAMES = ['RAINBOW ROAD','SUBTERRA','MAINSTAGE','THE GRID',
+  'GREEN CANOPY','ASTRAL SPIRE','KICK DOME','THE LAST SHUTTLE'];
 const FINAL_STAGE = 8;
 
 // ============================================================
@@ -348,7 +350,7 @@ function genWorld(stage, spawnFrac){
               ['loo',2550,38],['merch',2850,225],['bin',3150,135]];
     for(const [t,x,y] of OB){ const d=OB_DIMS[t]; w.obstacles.push({x,y,w:d.w,h:d.h,type:t,ph:x%6}); }
     // fixed totems — no Squad Flag in the car park
-    const TT=['sober','glow','torch','mum','signal','bass','sober'];
+    const TT=['sober','glow','torch','mum','signal','bass','shield'];
     const TP=[[420,135],[700,70],[1500,145],[1815,90],[2080,70],[2420,60],[2950,200]];
     TT.forEach((id,i)=>w.totems.push({x:TP[i][0],y:TP[i][1],type:TOTEMS.find(t=>t.id===id),taken:false,ph:i}));
     w.baggies=[{x:1150,y:210,taken:false,respawnT:0,ph:1},{x:2480,y:205,taken:false,respawnT:0,ph:3}];
@@ -469,7 +471,7 @@ function startStage(stage, withCutscene, spawnFrac){
   player.x=world.spawn.x; player.y=world.spawn.y;
   player.dir=angTo(world.spawn,{x:world.W/2,y:world.H/2}); player.invuln=2;
   party=[]; trail=[{x:player.x,y:player.y}]; trailDist=[0];
-  effects={}; exitGate=null; exitArrowT=0; G.zoom=1; friendDryT=0;
+  effects={}; exitGate=null; exitArrowT=0; G.zoom=1; friendDryT=0; G.shield=false;
   beatN=0; if(AC) setTempo(BPMS[Math.min(stage,FINAL_STAGE)-1]);
   if(world.final){
     // your whole crew comes with you — get them all on the bus
@@ -495,8 +497,8 @@ function startStage(stage, withCutscene, spawnFrac){
 const CHAT_POOL=[
   'we want to go to the next stage!!','this DJ is UNREAL','meet at a totem?',
   'i lost my shoe lmao','can you feel that bass','where are youuuu',
-  "my phone's on 12%",'someone said free water','the lasers are insane rn',
-  'bring glowsticks!!','i can see the train from here'];
+  "my phone's on 12%",'i need water','the lasers are insane rn',
+  'hhejyu gfgyss whrrerr rr u','i can see the train from here'];
 function phoneStart(){
   if(world && world.final){
     phone={t:0, dur:3.8, beeped:[false,false],
@@ -529,8 +531,8 @@ function say(txt,col,sub){ G.msgs.push({txt,col:col||'#fff',sub,t:3.2}); if(G.ms
 //  AUDIO — tiny techno engine
 // ============================================================
 let AC=null, muted=false, beatTimer=null, beatN=0, curTempo=0;
-// per-arena tempos: gates · main stage · bass tent · dome · jungle · hangar · temple · shuttle
-const BPMS=[132,126,140,138,174,155,138,190];
+// per-arena tempos: rainbow road · subterra · mainstage · grid · canopy · spire · kick dome · shuttle
+const BPMS=[132,140,126,138,174,145,160,190];
 function setTempo(bpm){
   if(!AC || bpm===curTempo) return;
   curTempo=bpm;
@@ -584,14 +586,20 @@ function beat(){
     hat(t, s%2?0.08:0.05, false);
     if(s%16===14) snare(t,0.2);
     if(s===8||s===24) hardStab(t, 440*Math.pow(2,key/12));
-  } else if(stg===1){                          // SUNRISE GATES — acid techno, 132
+  } else if(stg===1){                          // RAINBOW ROAD — acid techno, 132
     if(s%8===0) kick(t);
     if(s%8===4) clap(t);
     if(s%4===2) hat(t,0.16,true); else hat(t,0.05,false);
     const note=BASSLINE[s];
     if(note!==null) acid(t, 55*Math.pow(2,(note+key)/12), 0.16);
     if(s===14||s===30) stab(t, 220*Math.pow(2,key/12));
-  } else if(stg===2){                          // MAIN STAGE — big festival house, 126
+  } else if(stg===2){                          // SUBTERRA — halftime dubstep wobble, 140
+    if(s%16===0){ kick(t,true); sub(t, 55*Math.pow(2,key/12)); }
+    if(s%16===8) snare(t,0.26);
+    if(s%2===0) acid(t, 55*Math.pow(2,key/12), 0.18);   // the wobble
+    if(s%4===2) hat(t,0.05,false);
+    if(s%16===14) hat(t,0.1,true);
+  } else if(stg===3){                          // MAINSTAGE — big festival house, 126
     if(s%4===0) kick(t);
     if(s%4===2){ hat(t,0.13,true); houseBass(t, 55*Math.pow(2,key/12)); }
     if(s%2===1) hat(t,0.04,false);
@@ -602,38 +610,32 @@ function beat(){
     const rn=riff[(s>>1)%8];
     if(s%2===0 && rn!==null) twinkle(t, 440*Math.pow(2,(key+rn)/12), 0.05);
     if(s%32===0) pad(t, 110*Math.pow(2,key/12));
-  } else if(stg===3){                          // BASS TENT — halftime wobble, 140
-    if(s%16===0){ kick(t,true); sub(t, 55*Math.pow(2,key/12)); }
-    if(s%16===8) snare(t,0.26);
-    if(s%2===0) acid(t, 55*Math.pow(2,key/12), 0.18);   // the wobble
-    if(s%4===2) hat(t,0.05,false);
-    if(s%16===14) hat(t,0.1,true);
-  } else if(stg===4){                          // TECHNO DOME — dark driving techno, 138
+  } else if(stg===4){                          // THE GRID — dark driving techno, 138
     if(s%4===0){ kick(t); sub(t, 41*Math.pow(2,key/12)); }
     if(s%4===2) hat(t,0.1,true);
     if(s%2===1) hat(t,0.035,false);
     if(s%8===6) acid(t, 55*Math.pow(2,(key+[0,0,3,0][(s>>3)%4])/12), 0.13);
     if(s===28) stab(t, 220*Math.pow(2,key/12));
-  } else if(stg===5){                          // JUNGLE ARENA — jungle / dnb, 174
+  } else if(stg===5){                          // GREEN CANOPY — jungle, 174
     if(s%16===0||s%16===10) kick(t);
     if(s%8===4) snare(t,0.24);
     hat(t, s%2?0.09:0.04, false);
     if(s%4===0) sub(t, 55*Math.pow(2,(DNBLINE[(s>>2)%8]+key)/12));
     if(s===30) stab(t, 440*Math.pow(2,key/12));
-  } else if(stg===6){                          // HARDSTYLE HANGAR — 155, distorted
+  } else if(stg===6){                          // ASTRAL SPIRE — full-on psytrance, 145
+    if(s%4===0) kick(t);
+    else acid(t, 110*Math.pow(2,key/12), 0.12);          // galloping psy bass on the off-16ths
+    if(s%8===4) hat(t,0.1,true);
+    if(s%2===1) hat(t,0.03,false);
+    const zaps=[12,15,19,24];
+    if(s%16===6) twinkle(t, 880*Math.pow(2,(key+zaps[(s>>4)%4])/12), 0.05);
+    if(s%32===0) pad(t, 110*Math.pow(2,key/12));
+  } else {                                     // KICK DOME — uptempo hardstyle, 160
     if(s%4===0) kickDist(t);
     if(s%4===2){ hat(t,0.13,true); acid(t, 110*Math.pow(2,key/12), 0.16); }
     if(s%16===8) clap(t);
     if(s%2===1) hat(t,0.04,false);
     if(s===12||s===28) hardStab(t, 330*Math.pow(2,key/12));
-  } else {                                     // TRANCE TEMPLE — rolling arps, 138
-    if(s%4===0) kick(t);
-    if(s%4===2){ houseBass(t, 55*Math.pow(2,key/12)); hat(t,0.1,true); }
-    if(s%2===1) hat(t,0.03,false);
-    const arp=[0,7,12,15,12,7,12,19];
-    twinkle(t, 440*Math.pow(2,(key+arp[s%8])/12), 0.04);
-    if(s%32===0) pad(t, 110*Math.pow(2,key/12));
-    if(s%16===12) clap(t);
   }
 }
 // ---- menu music: driving 4/4 techno rave for the title & win screens ----
@@ -873,6 +875,12 @@ function scatterFriends(count, reason){
 
 function hitPenalty(what){
   if(player.invuln>0 || effects.mum || effects.bagstrong) return;   // protected
+  if(G.shield){   // the hydration pack takes the hit
+    G.shield=false; player.invuln=1.5; G.shake=4;
+    say('HYDRATION PACK!','#00e5ff','the water took the hit');
+    sfx('totem');
+    return;
+  }
   if(party.length===0){
     gameOverInfo={stage:G.stage, total:G.totalCollected, what};
     G.state='gameover'; sfx('hurt'); G.shake=12;
@@ -1037,7 +1045,8 @@ function update(dt){
   for(const tm of world.totems){
     if(!tm.taken && Math.hypot(tm.x-player.x,tm.y-player.y)<12){
       tm.taken=true; tm.respawnT=20;
-      effects[tm.type.id]=tm.type.dur;
+      if(tm.type.id==='shield') G.shield=true;       // a one-hit shield, not a timer
+      else effects[tm.type.id]=tm.type.dur;
       say(tm.type.name+'!', tm.type.col, tm.type.msg);
       sfx('totem');
     } else if(tm.taken){
@@ -1833,7 +1842,17 @@ function renderHUD(){
     cx.fillStyle=tdef.col; cx.fillRect(5,ey+10,64*clamp(effects[id]/tdef.dur,0,1),4);
     ey+=19;
   }
-  // PHONE SIGNAL — minimap with friends, totems, exit and you
+  // hydration pack — a wee water drop, your one-hit shield
+  if(G.shield){
+    const dx=12;
+    cx.fillStyle='#00e5ff';
+    cx.fillRect(dx-1,ey+1,2,2); cx.fillRect(dx-2,ey+3,4,4); cx.fillRect(dx-1,ey+7,2,1);
+    cx.fillStyle='#bdf6ff'; cx.fillRect(dx-1,ey+4,1,2);
+    txt('HYDRATED', 20, ey, 9, '#00e5ff');
+    ey+=19;
+  }
+
+  // FULL BARS — minimap with friends, totems, exit and you
   if(effects.signal){
     const mw=80, mh=Math.max(44,Math.round(mw*world.H/world.W));
     const mx=VW-mw-5, mY=22;
