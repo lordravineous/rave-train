@@ -29,6 +29,11 @@ const cv = document.getElementById('screen');
 const cx = cv.getContext('2d');
 const fogC = document.createElement('canvas');
 const fx = fogC.getContext('2d');
+// post-processing scratch canvases (mysterious baggy visual effects)
+const postC=document.createElement('canvas'), px2=postC.getContext('2d');
+const tintC=document.createElement('canvas'), tx2=tintC.getContext('2d');
+const prevC=document.createElement('canvas'), pv2=prevC.getContext('2d');
+const smallC=document.createElement('canvas'), sm2=smallC.getContext('2d');
 
 // portrait phones get a tall narrow view — everything renders bigger & clearer
 function computeView(){
@@ -38,6 +43,9 @@ function computeView(){
   cv.width=VW*PIX; cv.height=VH*PIX;
   cx.imageSmoothingEnabled=false;
   fogC.width=Math.ceil(VW/FOGS); fogC.height=Math.ceil(VH/FOGS);
+  postC.width=tintC.width=prevC.width=VW*PIX;
+  postC.height=tintC.height=prevC.height=VH*PIX;
+  smallC.width=Math.ceil(VW*PIX/4); smallC.height=Math.ceil(VH*PIX/4);
 }
 function fit(){
   computeView();
@@ -211,7 +219,6 @@ function shade(hex,amt){ // darken toward fog purple
 const TOTEMS = [
  {id:'sober', name:'SOBER FRIEND',  col:'#39ff14', dur:25, msg:'They know the way!'},
  {id:'glow',  name:'FAMILY PHOTO',  col:'#f5d300', dur:20, msg:"They've turned on the lights!"},
- {id:'water', name:'MYSTERIOUS BAG',col:'#cfe8ff', dur:10, msg:"I don't know what's in this but I feel FAST"},
  {id:'bass',  name:'BODY ODOUR',    col:'#a3e635', dur:15, msg:'You smell! The crowd backs off.'},
  {id:'torch', name:'FLASHLIGHT',    col:'#ff6d00', dur:18, msg:'A cone of light!'},
  {id:'signal',name:'PHONE SIGNAL',  col:'#b14aed', dur:25, msg:'Full bars! Check the map!'},
@@ -232,6 +239,33 @@ function drawTotemIcon(g,x,y,id){
     case 'flag':  p(-3,-3,7,7,'#1a1426'); p(-2,-3,1,7,'#c9b78a'); p(-1,-3,5,2,'#ffffff'); p(-1,-1,4,1,'#ff2d95'); break;
   }
   g.restore();
+}
+
+// ---------- the MYSTERIOUS BAGGY — a floating ziplock, contents unknown ----------
+const BAG_FX={
+  bagstrong:{name:'I FEEL STRONG',      col:'#ff4f4f', dur:9,  msg:'invincible. tunnel vision.'},
+  bagfast:  {name:'I FEEL FAST',        col:'#00e5ff', dur:10, msg:'everything is a blur!!'},
+  bagwavy:  {name:'i feel waaaavvyyy',  col:'#b14aed', dur:8,  msg:'controls?? what controls'},
+  bagloved: {name:'I FEEL LOVED',       col:'#ff8fab', dur:10, msg:'everyone here is your friend'},
+};
+function applyBag(){
+  for(const id in BAG_FX) delete effects[id];          // one trip at a time
+  const id=choice(Object.keys(BAG_FX));
+  effects[id]=BAG_FX[id].dur;
+  say(BAG_FX[id].name, BAG_FX[id].col, BAG_FX[id].msg);
+  sfx('totem');
+}
+function drawBaggy(b){
+  const x=Math.round(b.x), y=Math.round(b.y-6-Math.sin(G.t*2+b.ph)*3);
+  cx.fillStyle='#ffffff22'; cx.fillRect(b.x-5,b.y-1,10,3);   // ground shimmer
+  cx.globalAlpha=0.92;
+  cx.fillStyle='#eef2f8'; cx.fillRect(x-4,y-7,8,11);
+  cx.fillStyle='#cdd6e4'; cx.fillRect(x-4,y-7,8,2);          // seal
+  cx.fillStyle='#9be7ff'; cx.fillRect(x-4,y-5,8,1);          // zip
+  cx.fillStyle='#ffffff'; cx.fillRect(x-2,y-2,3,3);          // contents??
+  cx.fillStyle='#5a6478'; cx.fillRect(x+1,y+1,1,1);
+  cx.globalAlpha=1;
+  if(Math.sin(G.t*5+b.ph)>0.5){ cx.fillStyle='#fff'; cx.fillRect(x+5,y-10,1,2); cx.fillRect(x+6,y-8,1,1); }
 }
 
 // ---------- stage names ----------
@@ -296,9 +330,10 @@ function genWorld(stage, spawnFrac){
               ['loo',2550,38],['merch',2850,225],['bin',3150,135]];
     for(const [t,x,y] of OB){ const d=OB_DIMS[t]; w.obstacles.push({x,y,w:d.w,h:d.h,type:t,ph:x%6}); }
     // fixed totems — no Squad Flag in the car park
-    const TT=['sober','glow','water','torch','mum','signal','bass','sober'];
-    const TP=[[420,135],[700,70],[1150,210],[1500,145],[1815,90],[2080,70],[2420,60],[2950,200]];
+    const TT=['sober','glow','torch','mum','signal','bass','sober'];
+    const TP=[[420,135],[700,70],[1500,145],[1815,90],[2080,70],[2420,60],[2950,200]];
     TT.forEach((id,i)=>w.totems.push({x:TP[i][0],y:TP[i][1],type:TOTEMS.find(t=>t.id===id),taken:false,ph:i}));
+    w.baggies=[{x:1150,y:210,taken:false,respawnT:0,ph:1},{x:2480,y:205,taken:false,respawnT:0,ph:3}];
     w.artcars=[{x:1300,y:135,dir:0,t:2,ph:0},{x:2600,y:135,dir:Math.PI,t:4,ph:2.5}];
     return w;
   }
@@ -351,6 +386,10 @@ function genWorld(stage, spawnFrac){
     const p=freeSpot(w,55);
     w.totems.push({x:p.x,y:p.y,type:deck[i%deck.length],taken:false,ph:rnd(0,TAU)});
   }
+  // mysterious baggies floating about
+  w.baggies=[];
+  for(let i=0;i<2;i++){ const p=freeSpot(w,50);
+    w.baggies.push({x:p.x,y:p.y,taken:false,respawnT:0,ph:rnd(0,TAU)}); }
   // EL PULPO & FRIENDS — flame-breathing art cars, more each stage
   const nCars = stage>=6?3 : stage>=3?2 : 1;
   w.artcars=[];
@@ -472,7 +511,7 @@ function say(txt,col,sub){ G.msgs.push({txt,col:col||'#fff',sub,t:3.2}); if(G.ms
 //  AUDIO — tiny techno engine
 // ============================================================
 let AC=null, muted=false, beatTimer=null, beatN=0, curTempo=0;
-const TEMPOS=[132,150,174];                    // acid techno · big room · drum&bass
+const TEMPOS=[132,155,174];                    // acid techno · hardstyle · drum&bass
 function setTempo(bpm){
   if(!AC || bpm===curTempo) return;
   curTempo=bpm;
@@ -499,7 +538,10 @@ const DNBLINE=[0,0,3,5, 0,10,7,5];
 function beat(){
   if(!AC||muted) return;
   const t=AC.currentTime;
-  if(G.state==='select'||G.state==='win'){ chill(t); return; }
+  if(G.state==='select'||G.state==='win'){
+    if(curTempo!==124) setTempo(124);   // proper club tempo for the menus
+    chill(t); return;
+  }
   const style=(G.stage-1)%3;
   const s=beatN%32, S=beatN%512;               // 2-bar groove inside a 32-bar phrase
   beatN++;
@@ -516,12 +558,12 @@ function beat(){
     return;
   }
   if(G.stage>=FINAL_STAGE){                    // THE LAST SHUTTLE — flat-out panic
-    if(s%4===0) kick(t,true);
+    if(s%4===0) kickDist(t);
     if(s%4===2){ hat(t,0.15,true); acid(t, 110*Math.pow(2,key/12), 0.2); }
     if(s%8===4) clap(t);
     hat(t, s%2?0.08:0.05, false);
     if(s%16===14) snare(t,0.2);
-    if(s===8||s===24) stab(t, 440*Math.pow(2,key/12));
+    if(s===8||s===24) hardStab(t, 440*Math.pow(2,key/12));
   } else if(style===0){                        // ACID TECHNO (the classic)
     if(s%8===0) kick(t);
     if(s%8===4) clap(t);
@@ -529,12 +571,12 @@ function beat(){
     const note=BASSLINE[s];
     if(note!==null) acid(t, 55*Math.pow(2,(note+key)/12), 0.16);
     if(s===14||s===30) stab(t, 220*Math.pow(2,key/12));
-  } else if(style===1){                        // BIG ROOM / HARDSTYLE
-    if(s%4===0) kick(t,true);
-    if(s%4===2){ hat(t,0.14,true); acid(t, 110*Math.pow(2,key/12), 0.2); } // offbeat bass
+  } else if(style===1){                        // HARDSTYLE 155 — distorted kick & stabs
+    if(s%4===0) kickDist(t);
+    if(s%4===2){ hat(t,0.13,true); acid(t, 110*Math.pow(2,key/12), 0.16); } // offbeat bass
     if(s%16===8) clap(t);
     if(s%2===1) hat(t,0.04,false);
-    if(s===12||s===28) stab(t, 330*Math.pow(2,key/12));
+    if(s===12||s===28) hardStab(t, 330*Math.pow(2,key/12));
   } else {                                     // DRUM & BASS
     if(s%16===0||s%16===10) kick(t);
     if(s%8===4) snare(t,0.24);
@@ -543,17 +585,29 @@ function beat(){
     if(s===30) stab(t, 440*Math.pow(2,key/12));
   }
 }
-// ---- chill mode: warm pads + half-time kick for the title & win screens ----
+// ---- menu music: melodic clubby house for the title & win screens ----
 const PADPROG=[0,8,3,10];
+const HOUSE_MEL=[12,15,19,15, 12,10,7,10];
 function chill(t){
   const cs=beatN++%128;
-  if(cs%32===0) pad(t, 110*Math.pow(2,PADPROG[(cs>>5)%4]/12));
-  if(cs%16===0) kickSoft(t);
-  if(cs%8===4) hat(t,0.025,false);
-  if(cs%16===10) hat(t,0.05,true);
-  if(cs%4===2 && hash2(cs,7)>0.55)
-    twinkle(t, 880*Math.pow(2,[0,3,7,10,12][Math.floor(hash2(cs,3)*5)]/12));
+  const root=PADPROG[(cs>>5)%4];
+  if(cs%8===0) kickSoft(t,0.32);                       // four on the floor
+  if(cs%8===4) hat(t,0.12,true);                       // offbeat open hat
+  if(cs%4===2) hat(t,0.04,false);
+  if(cs%16===8) clap(t);
+  if(cs%32===0) pad(t, 110*Math.pow(2,root/12));       // warm pad bed
+  if(cs%8===2||cs%8===6) houseBass(t, 55*Math.pow(2,root/12));
+  if(cs%16===4||cs%16===12) pluck(t, 220*Math.pow(2,(root+[0,3,7][(cs>>4)%3])/12));
+  if(cs%4===0) twinkle(t, 440*Math.pow(2,(root+HOUSE_MEL[(cs>>2)%8])/12), 0.035);
 }
+function houseBass(t,f){ const o=AC.createOscillator(),g=AC.createGain(),lp=AC.createBiquadFilter();
+  o.type='sawtooth'; o.frequency.value=f; lp.type='lowpass'; lp.frequency.value=420;
+  g.gain.setValueAtTime(0.13,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.16);
+  o.connect(lp).connect(g).connect(AC.destination); o.start(t); o.stop(t+0.18);}
+function pluck(t,f){ const o=AC.createOscillator(),g=AC.createGain(),lp=AC.createBiquadFilter();
+  o.type='triangle'; o.frequency.value=f*2; lp.type='lowpass'; lp.frequency.value=1800;
+  g.gain.setValueAtTime(0.08,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.22);
+  o.connect(lp).connect(g).connect(AC.destination); o.start(t); o.stop(t+0.24);}
 function pad(t,f){
   [1,1.189,1.498,2].forEach(r=>{
     const o=AC.createOscillator(),g=AC.createGain(),lp=AC.createBiquadFilter();
@@ -564,14 +618,34 @@ function pad(t,f){
     o.connect(lp).connect(g).connect(AC.destination); o.start(t); o.stop(t+3.7);
   });
 }
-function kickSoft(t){ const o=AC.createOscillator(),g=AC.createGain();
-  o.frequency.setValueAtTime(120,t); o.frequency.exponentialRampToValueAtTime(42,t+0.12);
-  g.gain.setValueAtTime(0.22,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.18);
+function kickSoft(t,v=0.22){ const o=AC.createOscillator(),g=AC.createGain();
+  o.frequency.setValueAtTime(130,t); o.frequency.exponentialRampToValueAtTime(42,t+0.12);
+  g.gain.setValueAtTime(v,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.18);
   o.connect(g).connect(AC.destination); o.start(t); o.stop(t+0.2);}
-function twinkle(t,f){ const o=AC.createOscillator(),g=AC.createGain();
+function twinkle(t,f,v=0.05){ const o=AC.createOscillator(),g=AC.createGain();
   o.type='sine'; o.frequency.value=f;
-  g.gain.setValueAtTime(0.05,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.5);
+  g.gain.setValueAtTime(v,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.5);
   o.connect(g).connect(AC.destination); o.start(t); o.stop(t+0.55);}
+// hardstyle gear: tanh-distorted kick + detuned saw stab
+const DIST_CURVE=(()=>{const n=256,c=new Float32Array(n);
+  for(let i=0;i<n;i++){const x=i/(n-1)*2-1; c[i]=Math.tanh(x*3);} return c;})();
+function kickDist(t){
+  const o=AC.createOscillator(),g=AC.createGain(),ws=AC.createWaveShaper(),og=AC.createGain();
+  ws.curve=DIST_CURVE;
+  o.frequency.setValueAtTime(230,t); o.frequency.exponentialRampToValueAtTime(42,t+0.16);
+  g.gain.setValueAtTime(1.7,t); g.gain.exponentialRampToValueAtTime(0.01,t+0.2);
+  og.gain.value=0.4;
+  o.connect(g).connect(ws).connect(og).connect(AC.destination);
+  o.start(t); o.stop(t+0.22);}
+function hardStab(t,f){
+  [-18,0,18].forEach(d=>{
+    const o=AC.createOscillator(),g=AC.createGain(),bp=AC.createBiquadFilter();
+    o.type='sawtooth'; o.frequency.value=f; o.detune.value=d;
+    bp.type='bandpass'; bp.Q.value=2.5;
+    bp.frequency.setValueAtTime(2600,t); bp.frequency.exponentialRampToValueAtTime(700,t+0.16);
+    g.gain.setValueAtTime(0.09,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.18);
+    o.connect(bp).connect(g).connect(AC.destination); o.start(t); o.stop(t+0.2);
+  });}
 
 function snare(t,v){ const len=2200;
   const b=AC.createBuffer(1,len,AC.sampleRate),d=b.getChannelData(0);
@@ -759,7 +833,7 @@ function scatterFriends(count, reason){
 }
 
 function hitPenalty(what){
-  if(player.invuln>0 || effects.mum) return;   // RAVE MUM has you
+  if(player.invuln>0 || effects.mum || effects.bagstrong) return;   // protected
   if(party.length===0){
     gameOverInfo={stage:G.stage, total:G.totalCollected, what};
     G.state='gameover'; sfx('hurt'); G.shake=12;
@@ -802,15 +876,15 @@ function update(dt){
   // a mate pings you if you haven't found anyone in a while
   if(world.friends.length){
     friendDryT+=dt;
-    if(friendDryT>15 && friendDryT-dt<=15){ say('A MATE PINGS THEIR LOCATION!','#39ff14'); sfx('beep'); }
+    if(friendDryT>15 && friendDryT-dt<=15){ say('YOUR MATE PINGS THEIR LOCATION!','#39ff14'); sfx('beep'); }
   } else friendDryT=0;
 
   // ----- effects tick -----
   for(const id in effects){ effects[id]-=dt; if(effects[id]<=0) delete effects[id]; }
   if(player.invuln>0) player.invuln-=dt;
   if(exitArrowT>0) exitArrowT-=dt;
-  // flashlight zooms the camera out ~30%
-  G.zoom=lerp(G.zoom||1, effects.torch?0.72:1, 1-Math.pow(0.05,dt));
+  // flashlight (and I FEEL FAST) zoom the camera out ~30%
+  G.zoom=lerp(G.zoom||1, (effects.torch||effects.bagfast)?0.72:1, 1-Math.pow(0.05,dt));
 
   // watchdog: if touch state claims to be held but no touch event has arrived
   // in 3s, the browser ate a touchend — release everything
@@ -821,16 +895,17 @@ function update(dt){
   // ----- steering (game speeds up 30% per stage; turn scales to match) -----
   const smul=Math.min(Math.pow(1.3,G.stage-1),2.4);
   const turn=4.2*smul;
-  if(keys['ArrowLeft']||keys['a']||btnL) { player.dir-=turn*dt; mouse.active=0; }
-  if(keys['ArrowRight']||keys['d']||btnR){ player.dir+=turn*dt; mouse.active=0; }
+  const inv=effects.bagwavy?-1:1;        // waaaavvyyy swaps your controls
+  if(keys['ArrowLeft']||keys['a']||btnL) { player.dir-=turn*dt*inv; mouse.active=0; }
+  if(keys['ArrowRight']||keys['d']||btnR){ player.dir+=turn*dt*inv; mouse.active=0; }
   if(touchHeld) mouse.active=1.5;
   if(mouse.active>0){
     if(!mouse.sticky) mouse.active-=dt;   // only touch steering decays
     const target=Math.atan2(mouse.y-VH/2, mouse.x-VW/2);
     const d=angDiff(player.dir,target);
-    player.dir+=clamp(d, -turn*dt, turn*dt);
+    player.dir+=clamp(d, -turn*dt, turn*dt)*inv;
   }
-  const spd = player.speed * smul * (effects.water?1.45:1);
+  const spd = player.speed * smul * (effects.bagfast?1.45:1) * (effects.bagwavy?0.7:1);
   player.x+=Math.cos(player.dir)*spd*dt;
   player.y+=Math.sin(player.dir)*spd*dt;
 
@@ -945,8 +1020,22 @@ function update(dt){
     }
   }
 
-  // ----- SQUAD FLAG: your mates trek toward you from across the map -----
-  if(effects.flag){
+  // ----- mysterious baggies: pickup + respawn -----
+  for(const b of world.baggies||[]){
+    if(!b.taken && Math.hypot(b.x-player.x,b.y-player.y)<10){
+      b.taken=true; b.respawnT=25;
+      applyBag();
+    } else if(b.taken){
+      b.respawnT-=dt;
+      if(b.respawnT<=0){
+        if(!world.final){ const p=freeSpot(world,50); b.x=p.x; b.y=p.y; }
+        b.taken=false; b.ph=rnd(0,TAU);
+      }
+    }
+  }
+
+  // ----- SQUAD FLAG / I FEEL LOVED: mates trek toward you -----
+  if(effects.flag||effects.bagloved){
     for(const f of world.friends){
       if(f.fly>0) continue;
       const a=angTo(f,player);
@@ -960,7 +1049,7 @@ function update(dt){
   const trailLen=trailDist[trailDist.length-1]-trailDist[0];
   for(let i=2;i<members.length;i++){
     if((i+1)*SPACING > trailLen-4) break;   // member still bunched at trail start
-    if(Math.hypot(members[i].x-player.x,members[i].y-player.y)<6 && player.invuln<=0 && !effects.mum){
+    if(Math.hypot(members[i].x-player.x,members[i].y-player.y)<6 && player.invuln<=0 && !effects.mum && !effects.bagstrong){
       const cut=party.length-i;
       scatterFriends(cut,'tangled the conga line');
       say(`CONGA CRASH! ${cut} scattered!`,'#ff6d00');
@@ -1073,7 +1162,7 @@ function render(){
         cx.drawImage(transition.snap, -Math.round(off), 0, VW, VH);
       }
       break;
-    default: renderPlay(); renderHUD();
+    default: renderPlay(); postFX(); renderHUD();
   }
 }
 
@@ -1126,7 +1215,7 @@ function renderPlay(){
     if(flying){ // sprinting away, arms down, facing where they're running
       drawRaver(cx,f.x,f.y,f.pal,Math.floor(G.t*14+f.ph)%2,
         {armsUp:false, facing:dirFacing(Math.atan2(f.vy,f.vx))});
-    } else if(effects.flag){ // marching to the flag!
+    } else if(effects.flag||effects.bagloved){ // marching to the flag!
       drawRaver(cx,f.x,f.y,f.pal,Math.floor(G.t*10+f.ph)%2,
         {armsUp:false, facing:dirFacing(f.walkA||0)});
     } else {
@@ -1137,12 +1226,26 @@ function renderPlay(){
   }
 
   // crowds — arms down, just standing about watching the stage
+  // (unless you FEEL LOVED, in which case everyone looks like your friend)
+  const loved=!!effects.bagloved;
   for(const c of world.crowds){
     if(c.x+c.r<sx-25||c.x-c.r>sx+vw+25||c.y+c.r<sy-25||c.y-c.r>sy+vh+25) continue;
     for(const m of c.members){
-      const shuffle=Math.floor(G.t*1.5+m.ph)%2;
-      drawRaver(cx,m.x+m.hx,m.y+m.hy,m.pal,shuffle,{dim:0.55,armsUp:false,facing:m.facing});
+      if(loved){
+        cx.fillStyle=m.pal.glow+'33'; cx.fillRect(m.x+m.hx-8,m.y+m.hy-20,16,22);
+        cx.fillStyle=m.pal.glow+'44'; cx.fillRect(m.x+m.hx-5,m.y+m.hy-2,10,3);
+        drawRaver(cx,m.x+m.hx,m.y+m.hy,m.pal,Math.floor(G.t*6+m.ph)%2,{armsUp:true,facing:'down'});
+      } else {
+        const shuffle=Math.floor(G.t*1.5+m.ph)%2;
+        drawRaver(cx,m.x+m.hx,m.y+m.hy,m.pal,shuffle,{dim:0.55,armsUp:false,facing:m.facing});
+      }
     }
+  }
+
+  // mysterious baggies, floating
+  for(const b of world.baggies||[]){
+    if(b.taken||b.x<sx-20||b.x>sx+vw+20||b.y<sy-25||b.y>sy+vh+25) continue;
+    drawBaggy(b);
   }
 
   // totems (world layer)
@@ -1196,19 +1299,26 @@ function renderPlay(){
   // ---------- fog of war ----------
   if(G.state!=='select'){
     const lit=!!effects.glow;   // FAMILY PHOTO: the lights are on!
-    const R=(VISION*(lit?1.8:1) * (G.state==='flash'?1.2:1))*Z;
+    const tunnel=!!effects.bagstrong;   // I FEEL STRONG: cone vision ONLY
+    const R=(VISION*(lit?1.8:1)*(effects.bagfast?1.5:1) * (G.state==='flash'?1.2:1))*Z;
     const px=(player.x-sx)*Z, py=(player.y-sy)*Z;
     const FW=fogC.width, FH=fogC.height;
     fx.clearRect(0,0,FW,FH);
     fx.fillStyle=lit?'rgba(4,2,14,0.6)':'rgba(4,2,14,0.985)';
     fx.fillRect(0,0,FW,FH);
     fx.globalCompositeOperation='destination-out';
-    const grd=fx.createRadialGradient(px/FOGS,py/FOGS,R*0.72/FOGS,px/FOGS,py/FOGS,R/FOGS);
-    grd.addColorStop(0,'rgba(0,0,0,1)'); grd.addColorStop(0.8,'rgba(0,0,0,0.55)'); grd.addColorStop(1,'rgba(0,0,0,0)');
-    fx.fillStyle=grd; fx.fillRect(0,0,FW,FH);
-    // FLASHLIGHT — a cone of light carving through the fog ahead of you
-    if(effects.torch){
-      const cl=R*2.6, half=0.42;
+    if(!tunnel){
+      const grd=fx.createRadialGradient(px/FOGS,py/FOGS,R*0.72/FOGS,px/FOGS,py/FOGS,R/FOGS);
+      grd.addColorStop(0,'rgba(0,0,0,1)'); grd.addColorStop(0.8,'rgba(0,0,0,0.55)'); grd.addColorStop(1,'rgba(0,0,0,0)');
+      fx.fillStyle=grd; fx.fillRect(0,0,FW,FH);
+    } else { // tiny halo so you can at least see your own feet
+      const grd=fx.createRadialGradient(px/FOGS,py/FOGS,8/FOGS,px/FOGS,py/FOGS,30*Z/FOGS);
+      grd.addColorStop(0,'rgba(0,0,0,1)'); grd.addColorStop(1,'rgba(0,0,0,0)');
+      fx.fillStyle=grd; fx.fillRect(0,0,FW,FH);
+    }
+    // FLASHLIGHT / I FEEL STRONG — a cone of light carving through the fog
+    if(effects.torch||tunnel){
+      const cl=R*2.6, half=tunnel?0.5:0.42;
       const g2=fx.createRadialGradient(px/FOGS,py/FOGS,R*0.3/FOGS,px/FOGS,py/FOGS,cl/FOGS);
       g2.addColorStop(0,'rgba(0,0,0,1)'); g2.addColorStop(0.8,'rgba(0,0,0,0.85)'); g2.addColorStop(1,'rgba(0,0,0,0)');
       fx.fillStyle=g2;
@@ -1235,15 +1345,19 @@ function renderPlay(){
     cx.restore();
 
     // vision boundary — rotating dotted ring so you can SEE the fog edge
-    cx.save();
-    cx.strokeStyle=lit?'#f5d30055':'#9b7bff66'; cx.lineWidth=1;
-    cx.setLineDash([3,5]); cx.lineDashOffset=-G.t*12;
-    cx.beginPath(); cx.arc(px,py,R+Math.sin(G.t*2)*2,0,TAU); cx.stroke();
-    cx.restore();
+    if(!tunnel){
+      cx.save();
+      cx.strokeStyle=lit?'#f5d30055':'#9b7bff66'; cx.lineWidth=1;
+      cx.setLineDash([3,5]); cx.lineDashOffset=-G.t*12;
+      cx.beginPath(); cx.arc(px,py,R+Math.sin(G.t*2)*2,0,TAU); cx.stroke();
+      cx.restore();
+    }
 
     // ----- things visible THROUGH the fog -----
     cx.save(); cx.scale(Z,Z); cx.translate(-sx,-sy);
     for(const tm of world.totems){ if(!tm.taken) drawTotemBeacon(tm); }
+    for(const b of world.baggies||[]){ if(!b.taken){
+      cx.globalAlpha=0.5+0.4*Math.sin(G.t*4+b.ph); drawBaggy(b); cx.globalAlpha=1; } }
     // the pinged mate glows through the fog
     if((effects.sober || friendDryT>15) && world.friends.length){
       let best=null,bd=1e9;
@@ -1535,6 +1649,55 @@ function edgeArrow(target,col,sx,sy,Z=1,hideDist=0){
   cx.restore();
 }
 
+// ---------- post effects (the baggy is hitting) ----------
+function postFX(){
+  const hasFX=effects.bagstrong||effects.bagfast||effects.bagwavy||effects.bagloved;
+  if(!hasFX) return;
+  const W=cv.width, H=cv.height;
+  cx.setTransform(1,0,0,1,0,0);
+
+  if(effects.bagwavy){            // subtle screen wobble
+    px2.clearRect(0,0,W,H); px2.drawImage(cv,0,0);
+    cx.clearRect(0,0,W,H);
+    const t=G.t*2.6;
+    for(let y=0;y<H;y+=6){
+      const off=Math.sin(y*0.035+t)*4;
+      cx.drawImage(postC, 0,y,W,6, off,y,W,6);
+    }
+  }
+  if(effects.bagstrong){          // chromatic aberration + contrast
+    px2.clearRect(0,0,W,H); px2.drawImage(cv,0,0);
+    // red ghost, shifted right
+    tx2.globalCompositeOperation='source-over'; tx2.clearRect(0,0,W,H); tx2.drawImage(postC,0,0);
+    tx2.globalCompositeOperation='multiply'; tx2.fillStyle='#ff3030'; tx2.fillRect(0,0,W,H);
+    cx.globalCompositeOperation='lighter'; cx.globalAlpha=0.5;
+    cx.drawImage(tintC,5,0);
+    // cyan ghost, shifted left
+    tx2.globalCompositeOperation='source-over'; tx2.clearRect(0,0,W,H); tx2.drawImage(postC,0,0);
+    tx2.globalCompositeOperation='multiply'; tx2.fillStyle='#30ffff'; tx2.fillRect(0,0,W,H);
+    cx.drawImage(tintC,-5,0);
+    // contrast punch
+    cx.globalCompositeOperation='overlay'; cx.globalAlpha=0.35;
+    cx.drawImage(postC,0,0);
+    cx.globalAlpha=1; cx.globalCompositeOperation='source-over';
+  }
+  if(effects.bagfast){            // motion blur via frame ghosting
+    cx.globalAlpha=0.45; cx.drawImage(prevC,0,0); cx.globalAlpha=1;
+    pv2.clearRect(0,0,W,H); pv2.drawImage(cv,0,0);
+  }
+  if(effects.bagloved){           // bloom: blurred bright copy added on top
+    sm2.imageSmoothingEnabled=true;
+    sm2.clearRect(0,0,smallC.width,smallC.height);
+    sm2.drawImage(cv,0,0,smallC.width,smallC.height);
+    cx.imageSmoothingEnabled=true;
+    cx.globalCompositeOperation='lighter'; cx.globalAlpha=0.45;
+    cx.drawImage(smallC,0,0,smallC.width,smallC.height,0,0,W,H);
+    cx.globalAlpha=1; cx.globalCompositeOperation='source-over';
+    cx.imageSmoothingEnabled=false;
+  }
+  cx.setTransform(PIX,0,0,PIX,0,0);
+}
+
 // ---------- HUD ----------
 function txt(s,x,y,size,col,align){
   cx.font=`bold ${size}px "Courier New",monospace`;
@@ -1569,7 +1732,8 @@ function renderHUD(){
   // active effects
   let ey=22;
   for(const id in effects){
-    const tdef=TOTEMS.find(t=>t.id===id);
+    const tdef=TOTEMS.find(t=>t.id===id)||BAG_FX[id];
+    if(!tdef) continue;
     txt(tdef.name, 5, ey, 9, tdef.col);
     cx.fillStyle='#000000aa'; cx.fillRect(5,ey+10,64,4);
     cx.fillStyle=tdef.col; cx.fillRect(5,ey+10,64*clamp(effects[id]/tdef.dur,0,1),4);
@@ -1583,6 +1747,7 @@ function renderHUD(){
     cx.strokeStyle='#b14aed'; cx.lineWidth=1; cx.strokeRect(mx+0.5,mY+0.5,mw-1,mh-1);
     const X=x=>mx+x/world.W*mw, Yy=y=>mY+y/world.H*mh;
     for(const t of world.totems) if(!t.taken){ cx.fillStyle=t.type.col; cx.fillRect(X(t.x)-1,Yy(t.y)-1,2,2); }
+    for(const b of world.baggies||[]) if(!b.taken){ cx.fillStyle='#fff'; cx.fillRect(X(b.x)-1,Yy(b.y)-1,2,2); }
     if(Math.floor(G.t*4)%2){ cx.fillStyle='#39ff14';
       for(const f of world.friends) cx.fillRect(X(f.x)-1,Yy(f.y)-1,3,3); }
     if(exitGate){ cx.fillStyle='#f5d300'; cx.fillRect(X(exitGate.x)-2,Yy(exitGate.y)-2,4,4); }
@@ -1591,9 +1756,9 @@ function renderHUD(){
     txt('PHONE SIGNAL', mx+mw/2, mY+mh+3, 7, '#b14aed','center');
   }
 
-  // messages — above the fog circle (portrait) or in the clear zone low on
-  // the screen (landscape), never tangled with the effects list / minimap
-  let my = (VH/2 - VISION - 48 > 60) ? VH/2 - VISION - 48 : (TOUCH ? VH-104 : VH-72);
+  // messages — above the fog circle on portrait, top-centre on desktop
+  // (two-line format is narrow enough to clear the effects list & minimap)
+  let my = (VH/2 - VISION - 48 > 60) ? VH/2 - VISION - 48 : 22;
   for(const m of G.msgs){
     cx.globalAlpha=clamp(m.t,0,1);
     if(m.sub){
