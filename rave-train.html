@@ -71,7 +71,7 @@ const choice=a=>a[Math.floor(Math.random()*a.length)];
 // ---------- characters (pixel ravers) ----------
 const CHARS = [
  {name:'KEVIN NGUYEN', skin:'#e3b486', hair:'#241812', top:'#16161e', legs:'#23232f', glow:'#39ff14', style:'part'},
- {name:'TIFFANY TRAN', skin:'#e3b486', hair:'#f7d774', top:'#ff4f9a', legs:'#2a1b47', glow:'#00e5ff', style:'long'},
+ {name:'TIFFANY TRAN', skin:'#e3b486', hair:'#f7d774', top:'#eef2f8', legs:'#2456c9', glow:'#00e5ff', style:'long'},
  {name:'TECHNO TESS',skin:'#ffe0c2', hair:'#00ff9f', top:'#0d0d12', legs:'#3a1b4f', glow:'#ff2d95', style:'bob'},
  {name:'GLOW JOE',   skin:'#8d5524', hair:'#2b1a0e', top:'#f5d300', legs:'#143c2b', glow:'#ff6d00', style:'afro'},
  {name:'KANDI KAI',  skin:'#f1c27d', hair:'#b14aed', top:'#ff4f9a', legs:'#11324d', glow:'#f5d300', style:'spiky'},
@@ -252,7 +252,7 @@ function applyBag(){
   for(const id in BAG_FX) delete effects[id];          // one trip at a time
   const id=choice(Object.keys(BAG_FX));
   effects[id]=BAG_FX[id].dur;
-  say(BAG_FX[id].name, BAG_FX[id].col, BAG_FX[id].msg);
+  say('MYSTERIOUS BAG', BAG_FX[id].col, BAG_FX[id].name);
   sfx('totem');
 }
 function drawBaggy(b){
@@ -334,7 +334,7 @@ function genWorld(stage, spawnFrac){
     const TP=[[420,135],[700,70],[1500,145],[1815,90],[2080,70],[2420,60],[2950,200]];
     TT.forEach((id,i)=>w.totems.push({x:TP[i][0],y:TP[i][1],type:TOTEMS.find(t=>t.id===id),taken:false,ph:i}));
     w.baggies=[{x:1150,y:210,taken:false,respawnT:0,ph:1},{x:2480,y:205,taken:false,respawnT:0,ph:3}];
-    w.artcars=[{x:1300,y:135,dir:0,t:2,ph:0},{x:2600,y:135,dir:Math.PI,t:4,ph:2.5}];
+    w.artcars=[{x:1300,y:135,dir:0,t:2,ph:0,kind:0},{x:2600,y:135,dir:Math.PI,t:4,ph:2.5,kind:1}];
     return w;
   }
   const W=mapW(stage), H=mapH(stage);
@@ -394,7 +394,7 @@ function genWorld(stage, spawnFrac){
   const nCars = stage>=6?3 : stage>=3?2 : 1;
   w.artcars=[];
   for(let i=0;i<nCars;i++){
-    const car={x:rnd(W*0.2,W*0.8), y:rnd(Math.max(220,H*0.4),H-120), dir:rnd(0,TAU), t:rnd(1.2,4.6), ph:rnd(0,TAU)};
+    const car={x:rnd(W*0.2,W*0.8), y:rnd(Math.max(220,H*0.4),H-120), dir:rnd(0,TAU), t:rnd(1.2,4.6), ph:rnd(0,TAU), kind:(i+stage)%3};
     if(Math.hypot(car.x-sp.x,car.y-sp.y)<240)
       car.x = sp.x>W/2 ? Math.max(110,sp.x-320) : Math.min(W-110,sp.x+320);
     w.artcars.push(car);
@@ -452,7 +452,7 @@ function startStage(stage, withCutscene, spawnFrac){
   player.dir=angTo(world.spawn,{x:world.W/2,y:world.H/2}); player.invuln=2;
   party=[]; trail=[{x:player.x,y:player.y}]; trailDist=[0];
   effects={}; exitGate=null; exitArrowT=0; G.zoom=1; friendDryT=0;
-  beatN=0; if(AC) setTempo(stage>=FINAL_STAGE?190:TEMPOS[(stage-1)%3]);
+  beatN=0; if(AC) setTempo(BPMS[Math.min(stage,FINAL_STAGE)-1]);
   if(world.final){
     // your whole crew comes with you — get them all on the bus
     const crew=Math.min(12, friendsNeeded(stage-1));
@@ -511,7 +511,8 @@ function say(txt,col,sub){ G.msgs.push({txt,col:col||'#fff',sub,t:3.2}); if(G.ms
 //  AUDIO — tiny techno engine
 // ============================================================
 let AC=null, muted=false, beatTimer=null, beatN=0, curTempo=0;
-const TEMPOS=[132,155,174];                    // acid techno · hardstyle · drum&bass
+// per-arena tempos: gates · main stage · bass tent · dome · jungle · hangar · temple · shuttle
+const BPMS=[132,150,140,138,174,155,138,190];
 function setTempo(bpm){
   if(!AC || bpm===curTempo) return;
   curTempo=bpm;
@@ -525,7 +526,7 @@ function audioInit(){
   }
   AC = new (window.AudioContext||window.webkitAudioContext)();
   if(AC.state==='suspended') AC.resume();
-  setTempo((G.stage||1)>=FINAL_STAGE?190:TEMPOS[((G.stage||1)-1)%3]);
+  setTempo(BPMS[Math.min(G.stage||1,FINAL_STAGE)-1]);
 }
 // Safari also suspends audio when the tab is backgrounded — wake it on return
 document.addEventListener('visibilitychange',()=>{
@@ -542,10 +543,10 @@ function beat(){
     if(curTempo!==124) setTempo(124);   // proper club tempo for the menus
     chill(t); return;
   }
-  const style=(G.stage-1)%3;
   const s=beatN%32, S=beatN%512;               // 2-bar groove inside a 32-bar phrase
   beatN++;
   const key=(G.stage%4)*2;                     // key shifts per stage
+  const stg=Math.min(G.stage,FINAL_STAGE);
   if(S>=510) return;                           // breath of silence before the drop
   if(S===0 && beatN>1) crash(t);               // THE DROP
   if(S>=480){                                  // BUILDUP — last 2 bars of the phrase
@@ -554,35 +555,63 @@ function beat(){
     if(ph%div===0) snare(t, 0.1+ph*0.005);
     if(S%8===0) kick(t);
     hat(t, 0.03+ph*0.006, false);
-    if(style===0 && S%4===0) acid(t, 110*Math.pow(2,key/12), 0.1);
+    if(stg===1 && S%4===0) acid(t, 110*Math.pow(2,key/12), 0.1);
     return;
   }
-  if(G.stage>=FINAL_STAGE){                    // THE LAST SHUTTLE — flat-out panic
+  // ----- each arena has its own sound -----
+  if(stg===FINAL_STAGE){                       // THE LAST SHUTTLE — flat-out panic, 190
     if(s%4===0) kickDist(t);
     if(s%4===2){ hat(t,0.15,true); acid(t, 110*Math.pow(2,key/12), 0.2); }
     if(s%8===4) clap(t);
     hat(t, s%2?0.08:0.05, false);
     if(s%16===14) snare(t,0.2);
     if(s===8||s===24) hardStab(t, 440*Math.pow(2,key/12));
-  } else if(style===0){                        // ACID TECHNO (the classic)
+  } else if(stg===1){                          // SUNRISE GATES — acid techno, 132
     if(s%8===0) kick(t);
     if(s%8===4) clap(t);
     if(s%4===2) hat(t,0.16,true); else hat(t,0.05,false);
     const note=BASSLINE[s];
     if(note!==null) acid(t, 55*Math.pow(2,(note+key)/12), 0.16);
     if(s===14||s===30) stab(t, 220*Math.pow(2,key/12));
-  } else if(style===1){                        // HARDSTYLE 155 — distorted kick & stabs
-    if(s%4===0) kickDist(t);
-    if(s%4===2){ hat(t,0.13,true); acid(t, 110*Math.pow(2,key/12), 0.16); } // offbeat bass
+  } else if(stg===2){                          // MAIN STAGE — festival big room, 150
+    if(s%4===0) kick(t,true);
+    if(s%4===2){ hat(t,0.14,true); houseBass(t, 110*Math.pow(2,key/12)); }
     if(s%16===8) clap(t);
     if(s%2===1) hat(t,0.04,false);
-    if(s===12||s===28) hardStab(t, 330*Math.pow(2,key/12));
-  } else {                                     // DRUM & BASS
+    const ml=[0,3,7,5];
+    if(s%8===6) stab(t, 330*Math.pow(2,(key+ml[(s>>3)%4])/12));
+  } else if(stg===3){                          // BASS TENT — halftime wobble, 140
+    if(s%16===0){ kick(t,true); sub(t, 55*Math.pow(2,key/12)); }
+    if(s%16===8) snare(t,0.26);
+    if(s%2===0) acid(t, 55*Math.pow(2,key/12), 0.18);   // the wobble
+    if(s%4===2) hat(t,0.05,false);
+    if(s%16===14) hat(t,0.1,true);
+  } else if(stg===4){                          // TECHNO DOME — dark driving techno, 138
+    if(s%4===0){ kick(t); sub(t, 41*Math.pow(2,key/12)); }
+    if(s%4===2) hat(t,0.1,true);
+    if(s%2===1) hat(t,0.035,false);
+    if(s%8===6) acid(t, 55*Math.pow(2,(key+[0,0,3,0][(s>>3)%4])/12), 0.13);
+    if(s===28) stab(t, 220*Math.pow(2,key/12));
+  } else if(stg===5){                          // JUNGLE ARENA — jungle / dnb, 174
     if(s%16===0||s%16===10) kick(t);
     if(s%8===4) snare(t,0.24);
     hat(t, s%2?0.09:0.04, false);
     if(s%4===0) sub(t, 55*Math.pow(2,(DNBLINE[(s>>2)%8]+key)/12));
     if(s===30) stab(t, 440*Math.pow(2,key/12));
+  } else if(stg===6){                          // HARDSTYLE HANGAR — 155, distorted
+    if(s%4===0) kickDist(t);
+    if(s%4===2){ hat(t,0.13,true); acid(t, 110*Math.pow(2,key/12), 0.16); }
+    if(s%16===8) clap(t);
+    if(s%2===1) hat(t,0.04,false);
+    if(s===12||s===28) hardStab(t, 330*Math.pow(2,key/12));
+  } else {                                     // TRANCE TEMPLE — rolling arps, 138
+    if(s%4===0) kick(t);
+    if(s%4===2){ houseBass(t, 55*Math.pow(2,key/12)); hat(t,0.1,true); }
+    if(s%2===1) hat(t,0.03,false);
+    const arp=[0,7,12,15,12,7,12,19];
+    twinkle(t, 440*Math.pow(2,(key+arp[s%8])/12), 0.04);
+    if(s%32===0) pad(t, 110*Math.pow(2,key/12));
+    if(s%16===12) clap(t);
   }
 }
 // ---- menu music: melodic clubby house for the title & win screens ----
@@ -1232,9 +1261,12 @@ function renderPlay(){
     if(c.x+c.r<sx-25||c.x-c.r>sx+vw+25||c.y+c.r<sy-25||c.y-c.r>sy+vh+25) continue;
     for(const m of c.members){
       if(loved){
-        cx.fillStyle=m.pal.glow+'33'; cx.fillRect(m.x+m.hx-8,m.y+m.hy-20,16,22);
-        cx.fillStyle=m.pal.glow+'44'; cx.fillRect(m.x+m.hx-5,m.y+m.hy-2,10,3);
-        drawRaver(cx,m.x+m.hx,m.y+m.hy,m.pal,Math.floor(G.t*6+m.ph)%2,{armsUp:true,facing:'down'});
+        const mx2=m.x+m.hx, my2=m.y+m.hy;   // soft halo, same as friends
+        const hg=cx.createRadialGradient(mx2,my2-8,2,mx2,my2-8,14+2*Math.sin(G.t*5+m.ph));
+        hg.addColorStop(0,m.pal.glow+'77'); hg.addColorStop(1,m.pal.glow+'00');
+        cx.fillStyle=hg; cx.fillRect(mx2-16,my2-24,32,32);
+        cx.fillStyle=m.pal.glow+'44'; cx.fillRect(mx2-5,my2-2,10,3);
+        drawRaver(cx,mx2,my2,m.pal,Math.floor(G.t*6+m.ph)%2,{armsUp:true,facing:'down'});
       } else {
         const shuffle=Math.floor(G.t*1.5+m.ph)%2;
         drawRaver(cx,m.x+m.hx,m.y+m.hy,m.pal,shuffle,{dim:0.55,armsUp:false,facing:m.facing});
@@ -1356,8 +1388,6 @@ function renderPlay(){
     // ----- things visible THROUGH the fog -----
     cx.save(); cx.scale(Z,Z); cx.translate(-sx,-sy);
     for(const tm of world.totems){ if(!tm.taken) drawTotemBeacon(tm); }
-    for(const b of world.baggies||[]){ if(!b.taken){
-      cx.globalAlpha=0.5+0.4*Math.sin(G.t*4+b.ph); drawBaggy(b); cx.globalAlpha=1; } }
     // the pinged mate glows through the fog
     if((effects.sober || friendDryT>15) && world.friends.length){
       let best=null,bd=1e9;
@@ -1483,36 +1513,60 @@ function drawObstacle(o){
   }
 }
 
-// EL PULPO MECANICO — flame-breathing octopus art car
+// ART CARS — three designs: El Pulpo (octopus), the Dragon, the Boombox
 function drawArtCar(ac){
   const x=Math.round(ac.x), y=Math.round(ac.y);
-  const flame=(ac.t%5)<1;
+  const flame=(ac.t%5)<1, kind=ac.kind||0;
   // warm ground glow
   const gr=cx.createRadialGradient(x,y-8,4,x,y-8,flame?85:48);
   gr.addColorStop(0,flame?'#ffb34755':'#ff8c2a33'); gr.addColorStop(1,'rgba(255,140,42,0)');
   cx.fillStyle=gr; cx.fillRect(x-85,y-90,170,150);
-  // wheels
+  // wheels + truck base (shared)
   cx.fillStyle='#0d0b16'; cx.fillRect(x-20,y-4,8,6); cx.fillRect(x+12,y-4,8,6);
   cx.fillStyle='#33333f'; cx.fillRect(x-18,y-2,4,2); cx.fillRect(x+14,y-2,4,2);
-  // truck body
   cx.fillStyle='#8a7a55'; cx.fillRect(x-24,y-14,48,12);
   cx.fillStyle='#a89868'; cx.fillRect(x-24,y-14,48,3);
-  cx.fillStyle='#5a4d35'; cx.fillRect(x-18,y-10,10,6);             // window
-  cx.fillStyle=Math.sin(G.t*3)>0?'#ffd34d':'#aa8c2a'; cx.fillRect(x+17,y-10,5,3); // headlight
-  // octopus dome
-  cx.fillStyle='#c9912f'; cx.fillRect(x-10,y-34,20,20);
-  cx.fillStyle='#e0a93e'; cx.fillRect(x-8,y-37,16,5);
-  cx.fillStyle='#8a5d18'; cx.fillRect(x-10,y-22,20,2); cx.fillRect(x-10,y-27,20,1);
-  // big glowing eyes
-  cx.fillStyle='#ffe9a8'; cx.fillRect(x-7,y-31,5,5); cx.fillRect(x+2,y-31,5,5);
-  cx.fillStyle='#1a1208'; cx.fillRect(x-5,y-30,2,3); cx.fillRect(x+4,y-30,2,3);
-  // curling tentacles
-  cx.fillStyle='#c9912f';
-  cx.fillRect(x-17,y-26,7,3); cx.fillRect(x-20,y-33,4,9); cx.fillRect(x-20,y-35,6,3);
-  cx.fillRect(x+10,y-26,7,3); cx.fillRect(x+16,y-33,4,9); cx.fillRect(x+14,y-35,6,3);
+  cx.fillStyle='#5a4d35'; cx.fillRect(x-18,y-10,10,6);
+  cx.fillStyle=Math.sin(G.t*3)>0?'#ffd34d':'#aa8c2a'; cx.fillRect(x+17,y-10,5,3);
+  let jets;
+  if(kind===0){ // EL PULPO — golden octopus
+    cx.fillStyle='#c9912f'; cx.fillRect(x-10,y-34,20,20);
+    cx.fillStyle='#e0a93e'; cx.fillRect(x-8,y-37,16,5);
+    cx.fillStyle='#8a5d18'; cx.fillRect(x-10,y-22,20,2); cx.fillRect(x-10,y-27,20,1);
+    cx.fillStyle='#ffe9a8'; cx.fillRect(x-7,y-31,5,5); cx.fillRect(x+2,y-31,5,5);
+    cx.fillStyle='#1a1208'; cx.fillRect(x-5,y-30,2,3); cx.fillRect(x+4,y-30,2,3);
+    cx.fillStyle='#c9912f';
+    cx.fillRect(x-17,y-26,7,3); cx.fillRect(x-20,y-33,4,9); cx.fillRect(x-20,y-35,6,3);
+    cx.fillRect(x+10,y-26,7,3); cx.fillRect(x+16,y-33,4,9); cx.fillRect(x+14,y-35,6,3);
+    jets=[[x-18,y-35],[x-1,y-39],[x+18,y-35]];
+  } else if(kind===1){ // THE DRAGON — green serpent, horns, fire from the head
+    cx.fillStyle='#2e7d32'; cx.fillRect(x-9,y-30,18,16);            // coiled body
+    cx.fillStyle='#1b5e20'; cx.fillRect(x-9,y-21,18,2);
+    cx.fillStyle='#e53935'; cx.fillRect(x-7,y-33,3,3); cx.fillRect(x-1,y-34,3,4); cx.fillRect(x+5,y-33,3,3); // back spikes
+    cx.fillStyle='#43a047'; cx.fillRect(x-1,y-43,13,13);            // head, raised
+    cx.fillStyle='#1b5e20'; cx.fillRect(x-1,y-33,13,2);             // jaw
+    cx.fillStyle='#ffd34d'; cx.fillRect(x+5,y-40,4,4);              // eye
+    cx.fillStyle='#1a1208'; cx.fillRect(x+7,y-39,2,2);
+    cx.fillStyle='#e53935'; cx.fillRect(x+1,y-47,2,4); cx.fillRect(x+7,y-48,2,5); // horns
+    cx.fillStyle='#2e7d32'; cx.fillRect(x-16,y-24,7,4); cx.fillRect(x-20,y-28,5,3); // tail
+    jets=[[x+10,y-44],[x+3,y-46]];
+  } else { // THE BOOMBOX — wall of sound on wheels
+    cx.fillStyle='#23232f'; cx.fillRect(x-16,y-38,32,24);
+    cx.fillStyle='#3a3a4e'; cx.fillRect(x-14,y-36,28,20);
+    [[x-7],[x+7]].forEach(([ccx])=>{                                 // round cones
+      cx.beginPath(); cx.arc(ccx,y-25,5.5,0,TAU); cx.fillStyle='#15151f'; cx.fill();
+      cx.beginPath(); cx.arc(ccx,y-25,Math.sin(G.t*8+ac.ph)>0?3:2.4,0,TAU); cx.fillStyle='#44445e'; cx.fill();
+      cx.beginPath(); cx.arc(ccx,y-25,1,0,TAU); cx.fillStyle='#8a8aa8'; cx.fill();
+    });
+    cx.fillStyle='#0c0c14'; cx.fillRect(x-6,y-35,12,5);             // tape deck
+    cx.fillStyle='#ff2d95'; cx.fillRect(x-4,y-34,3,3);
+    cx.fillStyle='#00e5ff'; cx.fillRect(x+1,y-34,3,3);
+    cx.fillStyle='#55556e'; cx.fillRect(x-13,y-41,3,4); cx.fillRect(x+10,y-41,3,4); // exhaust pipes
+    jets=[[x-12,y-40],[x+12,y-40]];
+  }
   // FIRE — every 5 seconds
   if(flame){
-    [[x-18,y-35],[x-1,y-39],[x+18,y-35]].forEach(([jx,jy],i)=>{
+    jets.forEach(([jx,jy],i)=>{
       const h=9+((G.t*40+i*7)%9);
       cx.fillStyle='#ff6d00'; cx.fillRect(jx-3,jy-h,6,h);
       cx.fillStyle='#ffd34d'; cx.fillRect(jx-2,jy-h+2,4,h-4);
@@ -1731,7 +1785,9 @@ function renderHUD(){
 
   // active effects
   let ey=22;
-  for(const id in effects){
+  // mysterious bag effects always pinned to the top of the list
+  const fxIds=Object.keys(effects).sort((a,b)=>(BAG_FX[b]?1:0)-(BAG_FX[a]?1:0));
+  for(const id of fxIds){
     const tdef=TOTEMS.find(t=>t.id===id)||BAG_FX[id];
     if(!tdef) continue;
     txt(tdef.name, 5, ey, 9, tdef.col);
