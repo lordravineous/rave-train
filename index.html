@@ -11,11 +11,16 @@
   html,body{margin:0;padding:0;background:#07030f;height:100%;overflow:hidden;
     font-family:'Courier New',monospace;}
   #wrap{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;}
+  #cr{position:fixed;bottom:5px;left:50%;transform:translateX(-50%);
+    font:10px "Courier New",monospace;color:#ffffff44;text-decoration:none;
+    letter-spacing:1px;z-index:10;}
+  #cr:hover{color:#ffffff99;}
   canvas{image-rendering:pixelated;image-rendering:crisp-edges;background:#07030f;touch-action:none;}
 </style>
 </head>
 <body>
 <div id="wrap"><canvas id="screen"></canvas></div>
+<a id="cr" href="https://djravine.com" target="_blank" rel="noopener">© DJ RAVINE</a>
 <script>
 'use strict';
 // ============================================================
@@ -223,7 +228,7 @@ const TOTEMS = [
  {id:'glow',  name:'SHOULDER RIDE', col:'#f5d300', dur:20, msg:'You can see everything!'},
  {id:'bass',  name:'FESTIVAL BO',   col:'#a3e635', dur:15, msg:'You smell! The crowd backs off!'},
  {id:'torch', name:'PHONE TORCH',   col:'#ff6d00', dur:18, msg:'Your pupils are huge lmao'},
- {id:'signal',name:'FULL BARS',     col:'#b14aed', dur:25, msg:'Maps is working again!'},
+ {id:'signal',name:'WIFI CONNECTED',col:'#b14aed', dur:25, msg:'Maps is working again!'},
  {id:'mum',   name:'RAVE MUM',      col:'#ff8fab', dur:8,  msg:'You are safe. Everything is going to be okay'},
  {id:'flag',  name:'SQUAD FLAG',    col:'#ffffff', dur:12, msg:'Raise it so they can find you!'},
  {id:'shield',name:'HYDRATION PACK',col:'#00e5ff', dur:0,  msg:'Water is life!'},
@@ -542,7 +547,7 @@ function say(txt,col,sub){ G.msgs.push({txt,col:col||'#fff',sub,t:3.2}); if(G.ms
 // ============================================================
 let AC=null, muted=false, beatTimer=null, beatN=0, curTempo=0;
 // per-arena tempos: rainbow road · subterra · mainstage · grid · canopy · spire · kick dome · shuttle
-const BPMS=[132,140,126,138,174,145,160,190];
+const BPMS=[138,140,132,132,174,145,160,190];
 function setTempo(bpm){
   if(!AC || bpm===curTempo) return;
   curTempo=bpm;
@@ -585,7 +590,7 @@ function beat(){
     if(ph%div===0) snare(t, 0.1+ph*0.005);
     if(S%8===0) kick(t);
     hat(t, 0.03+ph*0.006, false);
-    if(stg===1 && S%4===0) acid(t, 110*Math.pow(2,key/12), 0.1);
+    if(stg===4 && S%4===0) acid(t, 110*Math.pow(2,key/12), 0.1);
     return;
   }
   // ----- each arena has its own sound -----
@@ -596,22 +601,21 @@ function beat(){
     hat(t, s%2?0.08:0.05, false);
     if(s%16===14) snare(t,0.2);
     if(s===8||s===24) hardStab(t, 440*Math.pow(2,key/12));
-  } else if(stg===1){                          // RAINBOW ROAD — acid techno, 132
-    if(s%8===0) kick(t);
-    if(s%8===4) clap(t);
-    if(s%4===2) hat(t,0.16,true); else hat(t,0.05,false);
-    const note=BASSLINE[s];
-    if(note!==null) acid(t, 55*Math.pow(2,(note+key)/12), 0.16);
-    if(s===14||s===30) stab(t, 220*Math.pow(2,key/12));
+  } else if(stg===1){                          // RAINBOW ROAD — driving techno, 138
+    if(s%4===0){ kick(t); sub(t, 41*Math.pow(2,key/12)); }
+    if(s%4===2) hat(t,0.1,true);
+    if(s%2===1) hat(t,0.035,false);
+    if(s%8===6) acid(t, 55*Math.pow(2,(key+[0,0,3,0][(s>>3)%4])/12), 0.13);
+    if(s===30) stab(t, 220*Math.pow(2,key/12));   // syncopated — the 'and' of beat 8
   } else if(stg===2){                          // SUBTERRA — halftime dubstep wobble, 140
     if(s%16===0){ kick(t,true); sub(t, 55*Math.pow(2,key/12)); }
     if(s%16===8) snare(t,0.26);
     if(s%2===0) acid(t, 55*Math.pow(2,key/12), 0.18);   // the wobble
     if(s%4===2) hat(t,0.05,false);
     if(s%16===14) hat(t,0.1,true);
-  } else if(stg===3){                          // MAINSTAGE — big festival house, 126
-    if(s%4===0) kick(t);
-    if(s%4===2){ hat(t,0.13,true); houseBass(t, 55*Math.pow(2,key/12)); }
+  } else if(stg===3){                          // MAINSTAGE — EDM big room, 132, BIG kicks
+    if(s%4===0){ kickDist(t); sub(t, 55*Math.pow(2,key/12)); }
+    if(s%4===2){ hat(t,0.14,true); houseBass(t, 55*Math.pow(2,key/12)); }
     if(s%2===1) hat(t,0.04,false);
     if(s%8===4) clap(t);
     const chords=[0,0,5,7];                    // steady chord stabs per half-bar
@@ -620,12 +624,13 @@ function beat(){
     const rn=riff[(s>>1)%8];
     if(s%2===0 && rn!==null) twinkle(t, 440*Math.pow(2,(key+rn)/12), 0.05);
     if(s%32===0) pad(t, 110*Math.pow(2,key/12));
-  } else if(stg===4){                          // THE GRID — dark driving techno, 138
-    if(s%4===0){ kick(t); sub(t, 41*Math.pow(2,key/12)); }
-    if(s%4===2) hat(t,0.1,true);
-    if(s%2===1) hat(t,0.035,false);
-    if(s%8===6) acid(t, 55*Math.pow(2,(key+[0,0,3,0][(s>>3)%4])/12), 0.13);
-    if(s===28) stab(t, 220*Math.pow(2,key/12));
+  } else if(stg===4){                          // THE GRID — acid techno, 132
+    if(s%8===0) kick(t);
+    if(s%8===4) clap(t);
+    if(s%4===2) hat(t,0.16,true); else hat(t,0.05,false);
+    const note=BASSLINE[s];
+    if(note!==null) acid(t, 55*Math.pow(2,(note+key)/12), 0.16);
+    if(s===14||s===30) stab(t, 220*Math.pow(2,key/12));
   } else if(stg===5){                          // GREEN CANOPY — jungle, 174
     if(s%16===0||s%16===10) kick(t);
     if(s%8===4) snare(t,0.24);
@@ -639,7 +644,6 @@ function beat(){
     if(s%2===1) hat(t,0.03,false);
     const zaps=[12,15,19,24];
     if(s%16===6) twinkle(t, 880*Math.pow(2,(key+zaps[(s>>4)%4])/12), 0.05);
-    if(s%32===0) pad(t, 110*Math.pow(2,key/12));
   } else {                                     // KICK DOME — uptempo hardstyle, 160
     if(s%4===0) kickDist(t);
     if(s%4===2){ hat(t,0.13,true); acid(t, 110*Math.pow(2,key/12), 0.16); }
@@ -1199,7 +1203,12 @@ function updateCutscene(dt){
 function hash2(i,j){ const s=Math.sin(i*127.1+j*311.7)*43758.5453; return s-Math.floor(s); }
 const ease=t=>t<0.5?2*t*t:1-Math.pow(-2*t+2,2)/2;
 
+const crEl=document.getElementById('cr');
+let crShown=null;
 function render(){
+  // copyright link only on menu screens — never a tap hazard mid-game
+  const showCr = G.state==='select'||G.state==='win'||G.state==='gameover';
+  if(showCr!==crShown){ crShown=showCr; if(crEl) crEl.style.display=showCr?'block':'none'; }
   cx.setTransform(PIX,0,0,PIX,0,0);
   cx.fillStyle='#07030f'; cx.fillRect(0,0,VW,VH);
   switch(G.state){
@@ -1862,7 +1871,7 @@ function renderHUD(){
     ey+=19;
   }
 
-  // FULL BARS — minimap with friends, totems, exit and you
+  // WIFI CONNECTED — minimap with friends, totems, exit and you
   if(effects.signal){
     const mw=80, mh=Math.max(44,Math.round(mw*world.H/world.W));
     const mx=VW-mw-5, mY=22;
@@ -1876,7 +1885,7 @@ function renderHUD(){
     if(exitGate){ cx.fillStyle='#f5d300'; cx.fillRect(X(exitGate.x)-2,Yy(exitGate.y)-2,4,4); }
     for(const ac of world.artcars||[]){ cx.fillStyle='#ff8c2a'; cx.fillRect(X(ac.x)-1,Yy(ac.y)-1,3,3); }
     cx.fillStyle='#fff'; cx.fillRect(X(player.x)-1,Yy(player.y)-1,3,3);
-    txt('PHONE SIGNAL', mx+mw/2, mY+mh+3, 7, '#b14aed','center');
+    txt('WIFI CONNECTED', mx+mw/2, mY+mh+3, 7, '#b14aed','center');
   }
 
   // messages — above the fog circle on portrait, top-centre on desktop
