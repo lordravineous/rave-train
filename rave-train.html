@@ -18,23 +18,33 @@
 // ============================================================
 //  RAVE TRAIN — find your friends at the festival
 // ============================================================
-const VW = 480, VH = 270;                 // logical pixel resolution
+let VW = 480, VH = 270;                   // logical pixel resolution (dynamic!)
 const PIX = 2;                            // internal supersample — doubles sprite pixel density
+const FOGS = 4;                           // fog canvas downscale (chunky edges)
+const TOUCH = 'ontouchstart' in window;   // phones & tablets get on-screen buttons
 const cv = document.getElementById('screen');
 const cx = cv.getContext('2d');
-cv.width = VW*PIX; cv.height = VH*PIX;
-cx.imageSmoothingEnabled = false;
+const fogC = document.createElement('canvas');
+const fx = fogC.getContext('2d');
+
+// portrait phones get a tall narrow view — everything renders bigger & clearer
+function computeView(){
+  const ar = innerWidth/Math.max(1,innerHeight);
+  if(ar < 1){ VW=320; VH=Math.max(420, Math.min(620, Math.round(320/ar))); }
+  else      { VW=480; VH=270; }
+  cv.width=VW*PIX; cv.height=VH*PIX;
+  cx.imageSmoothingEnabled=false;
+  fogC.width=Math.ceil(VW/FOGS); fogC.height=Math.ceil(VH/FOGS);
+}
 function fit(){
+  computeView();
   let s = Math.min(innerWidth/VW, innerHeight/VH);
   if(s>=1) s=Math.floor(s);          // integer scale on desktop, fractional on phones
   cv.style.width = VW*s+'px'; cv.style.height = VH*s+'px';
 }
-addEventListener('resize', fit); fit();
-
-// fog overlay canvas — quarter resolution for chunky pixelated fog edges
-const FOGS = 4;
-const fogC = document.createElement('canvas'); fogC.width=VW/FOGS; fogC.height=Math.ceil(VH/FOGS);
-const fx = fogC.getContext('2d');
+addEventListener('resize', fit);
+addEventListener('orientationchange', ()=>setTimeout(fit,150));
+fit();
 
 // ---------- helpers ----------
 const TAU = Math.PI*2;
@@ -582,7 +592,7 @@ addEventListener('keydown',e=>{
   if(G.state==='select'){
     if(e.key==='ArrowLeft'||e.key==='a') G.charIdx=(G.charIdx+CHARS.length-1)%CHARS.length;
     if(e.key==='ArrowRight'||e.key==='d') G.charIdx=(G.charIdx+1)%CHARS.length;
-    if(e.key==='ArrowUp'||e.key==='w'||e.key==='ArrowDown'||e.key==='s') G.charIdx=(G.charIdx+6)%CHARS.length;
+    if(e.key==='ArrowUp'||e.key==='w'||e.key==='ArrowDown'||e.key==='s') G.charIdx=(G.charIdx+selLayout().cols)%CHARS.length;
     if(e.key==='Enter'||e.key===' '){ G.totalCollected=0; startStage(1,false); }
   } else if((G.state==='gameover'||G.state==='win') && (e.key===' '||e.key==='Enter')){
     G.state='select';
@@ -595,19 +605,36 @@ cv.addEventListener('mousemove',e=>{
   mouse.x=(e.clientX-r.left)/r.width*VW; mouse.y=(e.clientY-r.top)/r.height*VH;
   mouse.active=1.5;
 });
-let touchHeld=false;
+let touchHeld=false, btnL=false, btnR=false;
 function pointerXY(e){
   const r=cv.getBoundingClientRect();
   return {x:(e.clientX-r.left)/r.width*VW, y:(e.clientY-r.top)/r.height*VH};
 }
+// on-screen steer buttons (touch devices, during play)
+function btnRects(){
+  const s=66, m=10;
+  return {L:{x:m,y:VH-s-m,w:s,h:s}, R:{x:VW-s-m,y:VH-s-m,w:s,h:s}};
+}
+const inRect=(p,b)=>p.x>=b.x&&p.x<=b.x+b.w&&p.y>=b.y&&p.y<=b.y+b.h;
+function readTouches(list){
+  btnL=false; btnR=false; touchHeld=false;
+  const r=btnRects();
+  for(const t of list){
+    const p=pointerXY(t);
+    if(G.state==='play' && inRect(p,r.L)) btnL=true;
+    else if(G.state==='play' && inRect(p,r.R)) btnR=true;
+    else { mouse.x=p.x; mouse.y=p.y; touchHeld=true; mouse.active=1.5; }
+  }
+}
 function pointerDown(mx,my){
   if(G.state==='select'){
-    const gap=56, x0=VW/2-(6-1)*gap/2;
-    if(my>62 && my<192){
-      const row=my<146?0:1;
-      let bi=-1,bd=26;
-      for(let i=0;i<6;i++){ const d=Math.abs(mx-(x0+i*gap)); if(d<bd){bd=d;bi=row*6+i;} }
-      if(bi>=0){ G.charIdx=bi; return; }
+    const SL=selLayout();
+    const top=SL.y0-44, bot=SL.y0+(SL.rows-1)*SL.rowH+12;
+    if(my>top && my<bot){
+      const row=clamp(Math.round((my-SL.y0+16)/SL.rowH),0,SL.rows-1);
+      let bi=-1,bd=SL.gap/2;
+      for(let i=0;i<SL.cols;i++){ const d=Math.abs(mx-(SL.x0+i*SL.gap)); if(d<bd){bd=d;bi=row*SL.cols+i;} }
+      if(bi>=0 && bi<CHARS.length){ G.charIdx=bi; return; }
     }
     G.totalCollected=0; startStage(1,false);
   }
@@ -620,11 +647,13 @@ function pointerDown(mx,my){
 }
 cv.addEventListener('mousedown',e=>{ audioInit(); const p=pointerXY(e); pointerDown(p.x,p.y); });
 cv.addEventListener('touchstart',e=>{ e.preventDefault(); audioInit();
-  const p=pointerXY(e.touches[0]); mouse.x=p.x; mouse.y=p.y; touchHeld=true; mouse.active=1.5;
-  pointerDown(p.x,p.y); },{passive:false});
-cv.addEventListener('touchmove',e=>{ e.preventDefault();
-  const p=pointerXY(e.touches[0]); mouse.x=p.x; mouse.y=p.y; mouse.active=1.5; },{passive:false});
-cv.addEventListener('touchend',e=>{ e.preventDefault(); touchHeld=false; mouse.active=0.4; },{passive:false});
+  readTouches(e.touches);
+  const p=pointerXY(e.touches[0]);
+  if(G.state!=='play' || p.y<30 || G.paused) pointerDown(p.x,p.y);   // menus + pause taps
+},{passive:false});
+cv.addEventListener('touchmove',e=>{ e.preventDefault(); readTouches(e.touches); },{passive:false});
+cv.addEventListener('touchend',e=>{ e.preventDefault(); readTouches(e.touches);
+  if(!touchHeld) mouse.active=Math.min(mouse.active,0.3); },{passive:false});
 
 // ============================================================
 //  UPDATE
@@ -701,8 +730,8 @@ function update(dt){
   // ----- steering (game speeds up 30% per stage; turn scales to match) -----
   const smul=Math.min(Math.pow(1.3,G.stage-1),2.4);
   const turn=4.2*smul;
-  if(keys['ArrowLeft']||keys['a']) { player.dir-=turn*dt; mouse.active=0; }
-  if(keys['ArrowRight']||keys['d']){ player.dir+=turn*dt; mouse.active=0; }
+  if(keys['ArrowLeft']||keys['a']||btnL) { player.dir-=turn*dt; mouse.active=0; }
+  if(keys['ArrowRight']||keys['d']||btnR){ player.dir+=turn*dt; mouse.active=0; }
   if(touchHeld) mouse.active=1.5;
   if(mouse.active>0){
     mouse.active-=dt;
@@ -1414,12 +1443,13 @@ function txt(s,x,y,size,col,align){
 function renderHUD(){
   const need=friendsNeeded(G.stage);
   cx.fillStyle='#000000bb'; cx.fillRect(0,0,VW,17);
-  txt(`STAGE ${G.stage} · ${STAGE_NAMES[(G.stage-1)%STAGE_NAMES.length]}`,5,4,10,'#2de2e6');
+  const narrow=VW<420;
+  txt(narrow?`STAGE ${G.stage}`:`STAGE ${G.stage} · ${STAGE_NAMES[(G.stage-1)%STAGE_NAMES.length]}`,5,4,10,'#2de2e6');
   if(G.debug) txt('DEBUG', 5, VH-26, 8, '#ff6d00');
   if(world.final){
     txt(`CREW ${party.length}`, VW-5,4,10, party.length?'#39ff14':'#ff4f4f','right');
     const tl=Math.max(0,world.timer||0);
-    txt(`BUS LEAVES: ${Math.ceil(tl)}s`, VW/2, 4, 10,
+    txt(narrow?`BUS ${Math.ceil(tl)}s`:`BUS LEAVES: ${Math.ceil(tl)}s`, VW/2, 4, 10,
       tl<11 ? (Math.floor(G.t*4)%2?'#ff4f4f':'#fff') : '#f5d300', 'center');
   } else {
     const col= party.length>=need ? '#39ff14' : '#fff';
@@ -1464,11 +1494,31 @@ function renderHUD(){
     txt('PAUSED', VW/2, VH/2-22, 18, '#fff','center');
     txt('P RESUME · R RESTART RUN · Q QUIT TO GATES', VW/2, VH/2+6, 9, '#2de2e6','center');
   }
-  cx.fillStyle='#00000099'; cx.fillRect(0,VH-15,VW,15);
-  txt('STEER: ← → / A · D / MOUSE / TOUCH      M: MUTE      P: PAUSE', VW/2, VH-12, 9, '#ffffffcc','center');
+  if(TOUCH){
+    // big steer buttons
+    const r=btnRects();
+    [['L',btnL,-1],['R',btnR,1]].forEach(([k,on,d])=>{
+      const b=r[k];
+      cx.fillStyle=on?'#ffffff3a':'#ffffff16'; cx.fillRect(b.x,b.y,b.w,b.h);
+      cx.strokeStyle='#ffffff55'; cx.lineWidth=1; cx.strokeRect(b.x+0.5,b.y+0.5,b.w-1,b.h-1);
+      const cxm=b.x+b.w/2, cym=b.y+b.h/2;
+      cx.fillStyle=on?'#ffffff':'#ffffffbb';
+      cx.beginPath(); cx.moveTo(cxm+9*d,cym-14); cx.lineTo(cxm+9*d,cym+14); cx.lineTo(cxm-13*d,cym);
+      cx.closePath(); cx.fill();
+    });
+  } else {
+    cx.fillStyle='#00000099'; cx.fillRect(0,VH-15,VW,15);
+    txt('STEER: ← → / A · D / MOUSE      M: MUTE      P: PAUSE', VW/2, VH-12, 9, '#ffffffcc','center');
+  }
 }
 
 // ---------- screens ----------
+function selLayout(){
+  const cols = VW<420 ? 4 : 6;
+  const gap  = Math.min(56, Math.floor((VW-44)/(cols-1)));
+  return {cols, gap, x0:VW/2-(cols-1)*gap/2,
+          rows:Math.ceil(CHARS.length/cols), y0:106, rowH:64};
+}
 function renderSelect(){
   // animated bg
   for(let i=0;i<40;i++){
@@ -1480,13 +1530,13 @@ function renderSelect(){
   renderLasers(0.1);
   const hue=['#ff2d95','#2de2e6','#39ff14','#f5d300'][Math.floor(G.t*4)%4];
   txt('RAVE TRAIN', VW/2, 24, 32, hue, 'center');
-  txt('find your friends · build your train · reach the next stage', VW/2, 60, 9, '#ffffffcc','center');
+  txt('find your friends · build your train · reach the next stage', VW/2, 60, VW<420?8:9, '#ffffffcc','center');
 
-  // character grid — 2 rows of 6
-  const gap=56, x0=VW/2-(6-1)*gap/2, rows=[112,178];
+  // character grid — responsive: 6 columns landscape, 4 portrait
+  const SL=selLayout();
   for(let i=0;i<CHARS.length;i++){
     const sel=i===G.charIdx;
-    const bx=x0+(i%6)*gap, by=rows[i<6?0:1];
+    const bx=SL.x0+(i%SL.cols)*SL.gap, by=SL.y0+Math.floor(i/SL.cols)*SL.rowH;
     if(sel){
       cx.fillStyle='#ffffff18'; cx.fillRect(bx-21,by-40,42,48);
       cx.strokeStyle=CHARS[i].glow; cx.strokeRect(bx-21.5,by-40.5,43,49);
@@ -1496,10 +1546,11 @@ function renderSelect(){
     drawRaver(cx,0,0,CHARS[i], sel?Math.floor(G.t*6)%2 : Math.floor(G.t*3+i)%2, {armsUp:sel,facing:'down'});
     cx.restore();
   }
-  txt(CHARS[G.charIdx].name, VW/2, 198, 13, CHARS[G.charIdx].glow,'center');
-  txt('← → ↑ ↓ CHOOSE YOUR RAVER', VW/2, 218, 9, '#fff','center');
-  if(Math.floor(G.t*2)%2) txt('PRESS ENTER / CLICK TO RAVE', VW/2, 234, 11, '#39ff14','center');
-  txt('walls & crowds scatter half your crew · alone + hit = game over', VW/2, 254, 8, '#ffffff99','center');
+  const ty=SL.y0+(SL.rows-1)*SL.rowH+42;
+  txt(CHARS[G.charIdx].name, VW/2, ty, 13, CHARS[G.charIdx].glow,'center');
+  txt(TOUCH?'TAP A RAVER TO CHOOSE':'← → ↑ ↓ CHOOSE YOUR RAVER', VW/2, ty+20, 9, '#fff','center');
+  if(Math.floor(G.t*2)%2) txt(TOUCH?'TAP BELOW TO RAVE':'PRESS ENTER / CLICK TO RAVE', VW/2, ty+36, 11, '#39ff14','center');
+  txt('walls & crowds scatter half your crew · alone + hit = game over', VW/2, VH-14, 8, '#ffffff99','center');
 }
 
 function renderCutscene(){
@@ -1596,17 +1647,18 @@ function renderFlash(){
 
 function renderGameOver(){
   cx.fillStyle='#000000cc'; cx.fillRect(0,0,VW,VH);
+  const cy=VH/2;
   if(gameOverInfo && gameOverInfo.bus){
-    txt('YOU MISSED', VW/2, 60, 22, '#ff4f4f','center');
-    txt('THE BUS!', VW/2, 86, 22, '#ff4f4f','center');
-    txt('the shuttle left without you...', VW/2, 120, 10, '#ffffffcc','center');
+    txt('YOU MISSED', VW/2, cy-75, 22, '#ff4f4f','center');
+    txt('THE BUS!', VW/2, cy-49, 22, '#ff4f4f','center');
+    txt('the shuttle left without you...', VW/2, cy-15, 10, '#ffffffcc','center');
   } else {
-    txt("YOU'VE LOST ALL", VW/2, 60, 22, '#ff4f4f','center');
-    txt("YOUR FRIENDS!", VW/2, 86, 22, '#ff4f4f','center');
-    if(gameOverInfo) txt(`you ${gameOverInfo.what} while flying solo`, VW/2, 120, 10, '#ffffffcc','center');
+    txt("YOU'VE LOST ALL", VW/2, cy-75, 22, '#ff4f4f','center');
+    txt("YOUR FRIENDS!", VW/2, cy-49, 22, '#ff4f4f','center');
+    if(gameOverInfo) txt(`you ${gameOverInfo.what} while flying solo`, VW/2, cy-15, 10, '#ffffffcc','center');
   }
-  if(gameOverInfo) txt(`stages reached: ${gameOverInfo.stage}   friends found: ${gameOverInfo.total}`, VW/2, 140, 10, '#2de2e6','center');
-  if(Math.floor(G.t*2)%2) txt('PRESS SPACE TO HEAD BACK TO THE GATES', VW/2, 180, 9, '#39ff14','center');
+  if(gameOverInfo) txt(`stages reached: ${gameOverInfo.stage}   friends found: ${gameOverInfo.total}`, VW/2, cy+5, 10, '#2de2e6','center');
+  if(Math.floor(G.t*2)%2) txt(TOUCH?'TAP TO HEAD BACK TO THE GATES':'PRESS SPACE TO HEAD BACK TO THE GATES', VW/2, cy+45, 9, '#39ff14','center');
 }
 
 // ---------- victory: on the bus, off to the kick ons ----------
@@ -1630,11 +1682,11 @@ function renderWin(){
     const wx=Math.min(bx,VW+120)-31+i*16, wy=VH/2+44-23*1.8+Math.sin(G.t*6+i)*1.5;
     cx.fillStyle=CHARS[i%CHARS.length].hair; cx.fillRect(wx,wy+18,6,4);
   }
-  txt('YOU CAUGHT THE LAST SHUTTLE!', VW/2, 36, 18, '#39ff14','center');
-  txt('kick ons at your hotel!!', VW/2, 62, 11, '#2de2e6','center');
-  txt(`crew on the bus: ${winCrew}   friends found all night: ${G.totalCollected}`, VW/2, 86, 10, '#f5d300','center');
-  txt('THANKS FOR RAVING', VW/2, 215, 9, '#ffffff88','center');
-  if(Math.floor(G.t*2)%2) txt('PRESS SPACE FOR ONE MORE RAVE', VW/2, 235, 10, '#fff','center');
+  txt('YOU CAUGHT THE LAST SHUTTLE!', VW/2, VH/2-99, 18, '#39ff14','center');
+  txt('kick ons at your hotel!!', VW/2, VH/2-73, 11, '#2de2e6','center');
+  txt(`crew on the bus: ${winCrew}   friends found all night: ${G.totalCollected}`, VW/2, VH/2-49, 10, '#f5d300','center');
+  txt('THANKS FOR RAVING', VW/2, VH/2+80, 9, '#ffffff88','center');
+  if(Math.floor(G.t*2)%2) txt(TOUCH?'TAP FOR ONE MORE RAVE':'PRESS SPACE FOR ONE MORE RAVE', VW/2, VH/2+100, 10, '#fff','center');
 }
 
 // ============================================================
