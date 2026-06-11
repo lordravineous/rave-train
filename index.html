@@ -512,7 +512,7 @@ function say(txt,col,sub){ G.msgs.push({txt,col:col||'#fff',sub,t:3.2}); if(G.ms
 // ============================================================
 let AC=null, muted=false, beatTimer=null, beatN=0, curTempo=0;
 // per-arena tempos: gates · main stage · bass tent · dome · jungle · hangar · temple · shuttle
-const BPMS=[132,150,140,138,174,155,138,190];
+const BPMS=[132,126,140,138,174,155,138,190];
 function setTempo(bpm){
   if(!AC || bpm===curTempo) return;
   curTempo=bpm;
@@ -540,7 +540,7 @@ function beat(){
   if(!AC||muted) return;
   const t=AC.currentTime;
   if(G.state==='select'||G.state==='win'){
-    if(curTempo!==124) setTempo(124);   // proper club tempo for the menus
+    if(curTempo!==128) setTempo(128);   // proper techno tempo for the menus
     chill(t); return;
   }
   const s=beatN%32, S=beatN%512;               // 2-bar groove inside a 32-bar phrase
@@ -573,13 +573,17 @@ function beat(){
     const note=BASSLINE[s];
     if(note!==null) acid(t, 55*Math.pow(2,(note+key)/12), 0.16);
     if(s===14||s===30) stab(t, 220*Math.pow(2,key/12));
-  } else if(stg===2){                          // MAIN STAGE — festival big room, 150
-    if(s%4===0) kick(t,true);
-    if(s%4===2){ hat(t,0.14,true); houseBass(t, 110*Math.pow(2,key/12)); }
-    if(s%16===8) clap(t);
+  } else if(stg===2){                          // MAIN STAGE — big festival house, 126
+    if(s%4===0) kick(t);
+    if(s%4===2){ hat(t,0.13,true); houseBass(t, 55*Math.pow(2,key/12)); }
     if(s%2===1) hat(t,0.04,false);
-    const ml=[0,3,7,5];
-    if(s%8===6) stab(t, 330*Math.pow(2,(key+ml[(s>>3)%4])/12));
+    if(s%8===4) clap(t);
+    const chords=[0,0,5,7];                    // steady chord stabs per half-bar
+    if(s%8===0) pluck(t, 220*Math.pow(2,(key+chords[(s>>3)%4])/12));
+    const riff=[12,null,15,null, 12,null,10,12];   // one simple repeating hook
+    const rn=riff[(s>>1)%8];
+    if(s%2===0 && rn!==null) twinkle(t, 440*Math.pow(2,(key+rn)/12), 0.05);
+    if(s%32===0) pad(t, 110*Math.pow(2,key/12));
   } else if(stg===3){                          // BASS TENT — halftime wobble, 140
     if(s%16===0){ kick(t,true); sub(t, 55*Math.pow(2,key/12)); }
     if(s%16===8) snare(t,0.26);
@@ -614,20 +618,20 @@ function beat(){
     if(s%16===12) clap(t);
   }
 }
-// ---- menu music: melodic clubby house for the title & win screens ----
+// ---- menu music: driving 4/4 techno rave for the title & win screens ----
 const PADPROG=[0,8,3,10];
-const HOUSE_MEL=[12,15,19,15, 12,10,7,10];
+const MENU_BASS=[0,null,12,null, 0,null,10,12];
 function chill(t){
   const cs=beatN++%128;
   const root=PADPROG[(cs>>5)%4];
-  if(cs%8===0) kickSoft(t,0.32);                       // four on the floor
-  if(cs%8===4) hat(t,0.12,true);                       // offbeat open hat
-  if(cs%4===2) hat(t,0.04,false);
+  if(cs%4===0) kick(t);                                // proper 4/4 kick
+  if(cs%4===2) hat(t,0.12,true);                       // offbeat open hat
+  if(cs%2===1) hat(t,0.035,false);
   if(cs%16===8) clap(t);
-  if(cs%32===0) pad(t, 110*Math.pow(2,root/12));       // warm pad bed
-  if(cs%8===2||cs%8===6) houseBass(t, 55*Math.pow(2,root/12));
-  if(cs%16===4||cs%16===12) pluck(t, 220*Math.pow(2,(root+[0,3,7][(cs>>4)%3])/12));
-  if(cs%4===0) twinkle(t, 440*Math.pow(2,(root+HOUSE_MEL[(cs>>2)%8])/12), 0.035);
+  const n=MENU_BASS[(cs>>1)%8];                        // rolling techno bassline
+  if(cs%2===0 && n!==null) acid(t, 55*Math.pow(2,(root+n)/12), 0.13);
+  if(cs%32===16) stab(t, 220*Math.pow(2,root/12));
+  if(cs%32===0) pad(t, 110*Math.pow(2,root/12));       // a hint of warmth underneath
 }
 function houseBass(t,f){ const o=AC.createOscillator(),g=AC.createGain(),lp=AC.createBiquadFilter();
   o.type='sawtooth'; o.frequency.value=f; lp.type='lowpass'; lp.frequency.value=420;
@@ -1855,7 +1859,8 @@ function selLayout(){
   const cols = VW<420 ? 4 : 6;
   const gap  = Math.min(56, Math.floor((VW-44)/(cols-1)));
   return {cols, gap, x0:VW/2-(cols-1)*gap/2,
-          rows:Math.ceil(CHARS.length/cols), y0:VW<420?142:106, rowH:64};
+          rows:Math.ceil(CHARS.length/cols),
+          y0:VW<420?142:118, rowH:VW<420?64:58};   // clear of the tagline on desktop
 }
 function renderSelect(){
   // animated bg
@@ -1892,11 +1897,11 @@ function renderSelect(){
     drawRaver(cx,0,0,CHARS[i], sel?Math.floor(G.t*6)%2 : Math.floor(G.t*3+i)%2, {armsUp:sel,facing:'down'});
     cx.restore();
   }
-  const ty=SL.y0+(SL.rows-1)*SL.rowH+42;
+  const ty=SL.y0+(SL.rows-1)*SL.rowH+38;
   txt(CHARS[G.charIdx].name, VW/2, ty, 13, CHARS[G.charIdx].glow,'center');
-  txt(TOUCH?'TAP A RAVER TO CHOOSE':'← → ↑ ↓ CHOOSE YOUR RAVER', VW/2, ty+20, 9, '#fff','center');
-  if(Math.floor(G.t*2)%2) txt(TOUCH?'TAP BELOW TO RAVE':'PRESS ENTER / CLICK TO RAVE', VW/2, ty+36, 11, '#39ff14','center');
-  txt('walls & crowds scatter half your crew · alone + hit = game over', VW/2, VH-14, VW<420?7:8, '#ffffff99','center');
+  txt(TOUCH?'TAP A RAVER TO CHOOSE':'← → ↑ ↓ CHOOSE YOUR RAVER', VW/2, ty+18, 9, '#fff','center');
+  if(Math.floor(G.t*2)%2) txt(TOUCH?'TAP BELOW TO RAVE':'PRESS ENTER / CLICK TO RAVE', VW/2, ty+32, 11, '#39ff14','center');
+  txt('walls & crowds scatter half your crew · alone + hit = game over', VW/2, VH-11, VW<420?7:8, '#ffffff99','center');
 }
 
 function renderCutscene(){
