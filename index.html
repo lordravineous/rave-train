@@ -426,7 +426,7 @@ function updatePhone(dt){
 }
 
 // ---------- messages ----------
-function say(txt,col){ G.msgs.push({txt,col:col||'#fff',t:3}); if(G.msgs.length>3)G.msgs.shift(); }
+function say(txt,col,sub){ G.msgs.push({txt,col:col||'#fff',sub,t:3.2}); if(G.msgs.length>3)G.msgs.shift(); }
 
 // ============================================================
 //  AUDIO — tiny techno engine
@@ -847,7 +847,7 @@ function update(dt){
     if(!tm.taken && Math.hypot(tm.x-player.x,tm.y-player.y)<12){
       tm.taken=true; tm.respawnT=20;
       effects[tm.type.id]=tm.type.dur;
-      say(`${tm.type.name}! ${tm.type.msg}`, tm.type.col);
+      say(tm.type.name+'!', tm.type.col, tm.type.msg);
       sfx('totem');
     } else if(tm.taken){
       tm.respawnT-=dt;
@@ -1490,12 +1490,20 @@ function renderHUD(){
     txt('PHONE SIGNAL', mx+mw/2, mY+mh+3, 7, '#b14aed','center');
   }
 
-  // messages
-  let my=30;
+  // messages — above the fog circle (portrait) or in the clear zone low on
+  // the screen (landscape), never tangled with the effects list / minimap
+  let my = (VH/2 - VISION - 48 > 60) ? VH/2 - VISION - 48 : (TOUCH ? VH-104 : VH-72);
   for(const m of G.msgs){
     cx.globalAlpha=clamp(m.t,0,1);
-    txt(m.txt, VW/2, my, 11, m.col,'center');
-    cx.globalAlpha=1; my+=14;
+    if(m.sub){
+      txt(m.txt, VW/2, my, 13, m.col,'center');
+      txt(m.sub, VW/2, my+16, 8, '#ffffffdd','center');
+      my+=32;
+    } else {
+      txt(m.txt, VW/2, my, 11, m.col,'center');
+      my+=14;
+    }
+    cx.globalAlpha=1;
   }
   if(G.paused){
     cx.fillStyle='#000000aa'; cx.fillRect(0,VH/2-30,VW,60);
@@ -1525,7 +1533,7 @@ function selLayout(){
   const cols = VW<420 ? 4 : 6;
   const gap  = Math.min(56, Math.floor((VW-44)/(cols-1)));
   return {cols, gap, x0:VW/2-(cols-1)*gap/2,
-          rows:Math.ceil(CHARS.length/cols), y0:106, rowH:64};
+          rows:Math.ceil(CHARS.length/cols), y0:VW<420?142:106, rowH:64};
 }
 function renderSelect(){
   // animated bg
@@ -1538,7 +1546,13 @@ function renderSelect(){
   renderLasers(0.1);
   const hue=['#ff2d95','#2de2e6','#39ff14','#f5d300'][Math.floor(G.t*4)%4];
   txt('RAVE TRAIN', VW/2, 24, 32, hue, 'center');
-  txt('find your friends · build your train · reach the next stage', VW/2, 60, VW<420?8:9, '#ffffffcc','center');
+  if(VW<420){ // stacked tagline on phones — nothing cut off, nothing overlapped
+    txt('find your friends', VW/2, 58, 9, '#ffffffcc','center');
+    txt('build your train', VW/2, 72, 9, '#ffffffcc','center');
+    txt('reach the next stage', VW/2, 86, 9, '#ffffffcc','center');
+  } else {
+    txt('find your friends · build your train · reach the next stage', VW/2, 60, 9, '#ffffffcc','center');
+  }
 
   // character grid — responsive: 6 columns landscape, 4 portrait
   const SL=selLayout();
