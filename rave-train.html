@@ -233,10 +233,20 @@ function drawTotemIcon(g,x,y,id){
   const p=(a,b,w,h,c)=>{g.fillStyle=c;g.fillRect(a,b,w,h);};
   switch(id){
     case 'sober': p(-3,-3,7,7,'#0d2606'); p(-2,-2,5,5,'#39ff14'); p(-1,-1,1,1,'#0d2606'); p(1,-1,1,1,'#0d2606'); p(-1,1,3,1,'#0d2606'); break;
-    case 'glow':  p(-3,-3,7,7,'#332b00'); p(-3,-2,7,5,'#3a3a4a'); p(-1,-1,3,3,'#00e5ff'); p(0,0,1,1,'#fff'); p(2,-3,2,1,'#f5d300'); break;
+    case 'glow':  p(-3,-3,7,7,'#332b00');   // shoulder ride: wee rider up top
+      p(-3,-3,1,2,'#f5d300'); p(2,-3,1,2,'#f5d300');   // rider arms up
+      p(-1,-3,2,2,'#ffd9b3');                          // rider head
+      p(-1,-1,2,2,'#f5d300');                          // rider body
+      p(-1,1,2,2,'#e3b486');                           // carrier head
+      p(-2,3,4,1,'#5a4d8a');                           // carrier shoulders
+      break;
     case 'water': p(-3,-3,7,7,'#1c2230'); p(-2,-2,5,5,'#e8eef7'); p(-2,-2,5,1,'#9be7ff'); p(-1,0,1,1,'#5a6478'); p(0,-1,1,1,'#5a6478'); p(0,1,1,1,'#5a6478'); break;
     case 'bass':  p(-3,-3,7,7,'#16200a'); p(-3,1,7,3,'#3a4a1e'); p(-2,-1,1,2,'#a3e635'); p(-2,-3,1,1,'#a3e635'); p(0,-2,1,2,'#a3e635'); p(0,-4,1,1,'#a3e635'); p(2,-1,1,2,'#a3e635'); p(2,-3,1,1,'#a3e635'); break;
-    case 'torch': p(-3,-3,7,7,'#2b1502'); p(-3,0,3,2,'#999'); p(0,-1,2,4,'#ccc'); p(2,-2,2,5,'#ffe28a'); break;
+    case 'torch': p(-3,-3,7,7,'#2b1502');   // phone torch: beam from the camera
+      p(-2,-3,5,1,'#fff7d0'); p(-1,-2,3,1,'#ffe28a'); p(0,-1,1,1,'#ffd34d');  // light cone
+      p(-1,0,3,4,'#1d1d28');                           // the phone
+      p(0,1,1,1,'#9be7ff');                            // screen glint
+      break;
     case 'signal':p(-3,-3,7,7,'#1d1030'); p(-3,-2,3,5,'#ddd'); p(-2,-1,1,3,'#9be7ff'); p(1,1,1,1,'#39ff14'); p(2,0,1,2,'#39ff14'); p(3,-1,1,3,'#39ff14'); break;
     case 'mum':   p(-3,-3,7,7,'#2a0a14'); p(-2,-2,2,2,'#ff8fab'); p(1,-2,2,2,'#ff8fab'); p(-3,-1,7,1,'#ff8fab'); p(-2,0,5,1,'#ff8fab'); p(-1,1,3,1,'#ff8fab'); p(0,2,1,1,'#ff8fab'); break;
     case 'shield':p(-3,-3,7,7,'#02222e'); p(-1,-3,2,2,'#00e5ff'); p(-2,-1,4,3,'#00e5ff'); p(-1,2,2,1,'#00e5ff'); p(-1,0,1,1,'#bdf6ff'); break;
