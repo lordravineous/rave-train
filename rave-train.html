@@ -111,13 +111,15 @@ function drawRaver(g, wx, wy, pal, frame, o={}){
     else  { P(-1,-12,3,5,TP); P(-1,-7,3,2,SK); }
     // head in profile
     P(-7,-26,14,12,SK);
-    P(2,-22,3,4,EY); P(2,-22,1,2,'#fff');     // one big eye
-    P(7,-21,1,3,SK);                          // wee nose
-    P(4,-17,2,1,'#c4606a');
-    P(-1,-19,2,2,'#e89a9a');                  // blush
-    if(pal.beard){ P(1,-18,6,3,'#5a3a22'); }
-    if(pal.shades){ P(1,-22,5,3,'#15151c'); }
-    if(pal.visor){ P(0,-23,8,4,pal.visor); P(1,-22,5,1,'#ffffff'); }
+    if(!o.faceless){
+      P(2,-22,3,4,EY); P(2,-22,1,2,'#fff');   // one big eye
+      P(7,-21,1,3,SK);                        // wee nose
+      P(4,-17,2,1,'#c4606a');
+      P(-1,-19,2,2,'#e89a9a');                // blush
+      if(pal.beard){ P(1,-18,6,3,'#5a3a22'); }
+      if(pal.shades){ P(1,-22,5,3,'#15151c'); }
+      if(pal.visor){ P(0,-23,8,4,pal.visor); P(1,-22,5,1,'#ffffff'); }
+    }
   } else {
     // legs + shoes (little step bounce)
     P(-4,-6,3,frame?5:6,LG); P(1,-6,3,frame?6:5,LG);
@@ -134,7 +136,7 @@ function drawRaver(g, wx, wy, pal, frame, o={}){
     // BIG anime head
     P(-8,-26,16,12,SK);
     if(back){ P(-8,-26,16,12,H); }
-    else{
+    else if(!o.faceless){
       P(-5,-22,3,4,EY);  P(2,-22,3,4,EY);     // big sparkly eyes
       P(-5,-22,1,2,'#fff'); P(2,-22,1,2,'#fff');
       P(-1,-17,2,1,'#c4606a');                // mouth
@@ -248,9 +250,19 @@ const BAG_FX={
   bagwavy:  {name:'i feel waaaavvyyy',  col:'#b14aed', dur:8,  msg:'controls?? what controls'},
   bagloved: {name:'I FEEL LOVED',       col:'#ff8fab', dur:10, msg:'everyone here is your friend'},
 };
+let lastBag=null;
 function applyBag(){
   for(const id in BAG_FX) delete effects[id];          // one trip at a time
-  const id=choice(Object.keys(BAG_FX));
+  // weighted, anti-streak roll: never the same trip twice in a row,
+  // and the wavy dud comes up rarer than the good stuff
+  const pool=[];
+  for(const id of Object.keys(BAG_FX)){
+    if(id===lastBag) continue;
+    const w = id==='bagwavy' ? 1 : 2;
+    for(let k=0;k<w;k++) pool.push(id);
+  }
+  const id=choice(pool);
+  lastBag=id;
   effects[id]=BAG_FX[id].dur;
   say('MYSTERIOUS BAG', BAG_FX[id].col, BAG_FX[id].name);
   sfx('totem');
@@ -289,7 +301,13 @@ let effects={};          // active powerups id->timeLeft
 let exitGate=null, exitArrowT=0;
 let transition=null, cutscene=null, flashT=0, gameOverInfo=null;
 let phone=null, friendDryT=0;   // group-chat intro · seconds since last friend found
-let winT=0, winCrew=0, winPals=[];   // victory screen
+let winT=0, winCrew=0, winPals=[], winNames=[];   // victory screen
+// the roll-call of ravers who made it on the bus
+const RAVER_NAMES=[
+ 'Jennifer','Michelle','Amy','Grace','Emily','Jessica','Jenny','Vivian','Stephanie',
+ 'Tiffany','Angela','Ashley','Sarah','Amanda','Alice','Cindy','Maya','Sophia',
+ 'Kevin','Michael','Daniel','Andrew','David','Jason','Ryan','Justin','Eric','Jonathan',
+ 'Matthew','Christopher','Alex','Brian','Peter','John','James','Joshua','Nathan'];
 
 const SPACING=11;        // px between party members along trail
 const VISION=120;        // base fog radius
@@ -478,7 +496,7 @@ const CHAT_POOL=[
   'we want to go to the next stage!!','this DJ is UNREAL','meet at a totem?',
   'i lost my shoe lmao','can you feel that bass','where are youuuu',
   "my phone's on 12%",'someone said free water','the lasers are insane rn',
-  'bring glowsticks!!','i can see the conga from here'];
+  'bring glowsticks!!','i can see the train from here'];
 function phoneStart(){
   if(world && world.final){
     phone={t:0, dur:3.8, beeped:[false,false],
@@ -756,7 +774,6 @@ function sfx(kind){
 //  INPUT
 // ============================================================
 const keys={};
-let mouse={x:VW/2,y:VH/2,active:0};
 addEventListener('keydown',e=>{
   keys[e.key]=true; audioInit();
   if(e.key==='m'||e.key==='M') muted=!muted;
@@ -785,12 +802,8 @@ addEventListener('keydown',e=>{
   if([' ','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) e.preventDefault();
 });
 addEventListener('keyup',e=>keys[e.key]=false);
-cv.addEventListener('mousemove',e=>{
-  const r=cv.getBoundingClientRect();
-  mouse.x=(e.clientX-r.left)/r.width*VW; mouse.y=(e.clientY-r.top)/r.height*VH;
-  mouse.active=1.5; mouse.sticky=true;   // desktop mouse steering never times out
-});
-let touchHeld=false, btnL=false, btnR=false;
+// (mouse / free-tap steering removed — keyboard on desktop, buttons on touch)
+let btnL=false, btnR=false;
 function pointerXY(e){
   const r=cv.getBoundingClientRect();
   return {x:(e.clientX-r.left)/r.width*VW, y:(e.clientY-r.top)/r.height*VH};
@@ -803,14 +816,14 @@ function btnRects(){
 const inRect=(p,b)=>p.x>=b.x&&p.x<=b.x+b.w&&p.y>=b.y&&p.y<=b.y+b.h;
 let lastTouchEvt=0;
 function readTouches(list){
-  btnL=false; btnR=false; touchHeld=false;
+  btnL=false; btnR=false;
   lastTouchEvt=performance.now();
   const r=btnRects();
   for(const t of list){
     const p=pointerXY(t);
     if(G.state==='play' && inRect(p,r.L)) btnL=true;
     else if(G.state==='play' && inRect(p,r.R)) btnR=true;
-    else { mouse.x=p.x; mouse.y=p.y; touchHeld=true; mouse.active=1.5; mouse.sticky=false; }
+    // touches outside the buttons do nothing — no accidental steering
   }
 }
 function pointerDown(mx,my){
@@ -834,12 +847,11 @@ cv.addEventListener('touchstart',e=>{ e.preventDefault(); audioInit();
   if(G.state!=='play' || p.y<30 || G.paused) pointerDown(p.x,p.y);   // menus + pause taps
 },{passive:false});
 cv.addEventListener('touchmove',e=>{ e.preventDefault(); readTouches(e.touches); },{passive:false});
-cv.addEventListener('touchend',e=>{ e.preventDefault(); readTouches(e.touches);
-  if(!touchHeld) mouse.active=Math.min(mouse.active,0.3); },{passive:false});
+cv.addEventListener('touchend',e=>{ e.preventDefault(); readTouches(e.touches); },{passive:false});
 // Android fires touchcancel (notifications, gestures, palm rejection) — without
-// this, button/steer state stays stuck and controls "go crazy"
+// this, button state stays stuck and controls "go crazy"
 cv.addEventListener('touchcancel',e=>{ e.preventDefault();
-  btnL=false; btnR=false; touchHeld=false; mouse.active=0; },{passive:false});
+  btnL=false; btnR=false; },{passive:false});
 
 // ============================================================
 //  UPDATE
@@ -913,25 +925,16 @@ function update(dt){
   // flashlight (and I FEEL FAST) zoom the camera out ~30%
   G.zoom=lerp(G.zoom||1, (effects.torch||effects.bagfast)?0.72:1, 1-Math.pow(0.05,dt));
 
-  // watchdog: if touch state claims to be held but no touch event has arrived
-  // in 3s, the browser ate a touchend — release everything
-  if((btnL||btnR||touchHeld) && performance.now()-lastTouchEvt>3000){
-    btnL=false; btnR=false; touchHeld=false; mouse.active=0;
-  }
+  // watchdog: if a button claims to be held but no touch event has arrived
+  // in 3s, the browser ate a touchend — release it
+  if((btnL||btnR) && performance.now()-lastTouchEvt>3000){ btnL=false; btnR=false; }
 
-  // ----- steering (game speeds up 30% per stage; turn scales to match) -----
+  // ----- steering: keyboard or buttons only (speeds up 30%/stage; turn scales) -----
   const smul=Math.min(Math.pow(1.3,G.stage-1),2.4);
   const turn=4.2*smul;
   const inv=effects.bagwavy?-1:1;        // waaaavvyyy swaps your controls
-  if(keys['ArrowLeft']||keys['a']||btnL) { player.dir-=turn*dt*inv; mouse.active=0; }
-  if(keys['ArrowRight']||keys['d']||btnR){ player.dir+=turn*dt*inv; mouse.active=0; }
-  if(touchHeld) mouse.active=1.5;
-  if(mouse.active>0){
-    if(!mouse.sticky) mouse.active-=dt;   // only touch steering decays
-    const target=Math.atan2(mouse.y-VH/2, mouse.x-VW/2);
-    const d=angDiff(player.dir,target);
-    player.dir+=clamp(d, -turn*dt, turn*dt)*inv;
-  }
+  if(keys['ArrowLeft']||keys['a']||btnL)  player.dir-=turn*dt*inv;
+  if(keys['ArrowRight']||keys['d']||btnR) player.dir+=turn*dt*inv;
   const spd = player.speed * smul * (effects.bagfast?1.45:1) * (effects.bagwavy?0.7:1);
   player.x+=Math.cos(player.dir)*spd*dt;
   player.y+=Math.sin(player.dir)*spd*dt;
@@ -1078,8 +1081,8 @@ function update(dt){
     if((i+1)*SPACING > trailLen-4) break;   // member still bunched at trail start
     if(Math.hypot(members[i].x-player.x,members[i].y-player.y)<6 && player.invuln<=0 && !effects.mum && !effects.bagstrong){
       const cut=party.length-i;
-      scatterFriends(cut,'tangled the conga line');
-      say(`CONGA CRASH! ${cut} scattered!`,'#ff6d00');
+      scatterFriends(cut,'tangled the train');
+      say(`TRAIN WRECK! ${cut} scattered!`,'#ff6d00');
       sfx('cut');
       player.invuln=1.2;
       break;
@@ -1092,6 +1095,11 @@ function update(dt){
     if(world.final){
       winCrew=party.length; winT=0;
       winPals=[CHARS[G.charIdx], ...party.map(p=>p.pal)];
+      // one name per person on the bus — you first, then random unique picks
+      const me=CHARS[G.charIdx].name.split(' ')[0];
+      winNames=[me.charAt(0)+me.slice(1).toLowerCase()];
+      const pool=RAVER_NAMES.filter(n=>n.toUpperCase()!==me).sort(()=>Math.random()-0.5);
+      for(let i=0;i<winCrew;i++) winNames.push(pool[i%pool.length]);
       G.state='win';
     }
     else beginTransition();
@@ -1267,7 +1275,7 @@ function renderPlay(){
         drawRaver(cx,mx2,my2,m.pal,Math.floor(G.t*6+m.ph)%2,{armsUp:true,facing:'down'});
       } else {
         const shuffle=Math.floor(G.t*1.5+m.ph)%2;
-        drawRaver(cx,m.x+m.hx,m.y+m.hy,m.pal,shuffle,{dim:0.55,armsUp:false,facing:m.facing});
+        drawRaver(cx,m.x+m.hx,m.y+m.hy,m.pal,shuffle,{dim:0.55,armsUp:false,facing:m.facing,faceless:true});
       }
     }
   }
@@ -1653,10 +1661,42 @@ function drawTotemBeacon(tm){ // simplified glowing marker drawn on top of fog
   drawTotem(tm);
   cx.globalAlpha=1;
 }
-// the shuttle bus — your ride to the kick ons
-function drawBus(x,y){
+// the shuttle bus — your ride to the kick ons.
+// pass `pals` for the big victory bus with the ACTUAL crew in the windows.
+function drawBus(x,y,pals){
   x=Math.round(x); y=Math.round(y);
   const bl=Math.floor(G.t*4)%2;
+  if(pals){
+    // body
+    cx.fillStyle='#f5d300'; cx.fillRect(x-30,y-24,60,20);
+    cx.fillStyle='#fff7d0'; cx.fillRect(x-30,y-24,60,3);
+    // destination sign
+    cx.fillStyle='#000'; cx.fillRect(x-17,y-31,34,7);
+    cx.fillStyle=bl?'#39ff14':'#ff6d00'; cx.font='bold 6px monospace'; cx.textAlign='center';
+    cx.fillText('KICK ONS', x, y-25.5);
+    // windows — the real crew, real hairstyles, bouncing with glowsticks up
+    for(let i=0;i<4;i++){
+      const wx=x-26+i*12, wy=y-19;
+      cx.fillStyle='#0b2a3a'; cx.fillRect(wx,wy,10,9);
+      if(pals[i]){
+        cx.save();
+        cx.beginPath(); cx.rect(wx,wy,10,9); cx.clip();
+        const bob=Math.sin(G.t*6+i)*0.8;
+        cx.translate(wx+5, wy+15.3+bob);
+        cx.scale(0.9,0.9);
+        drawRaver(cx,0,0,pals[i],Math.floor(G.t*6+i)%2,{facing:'down',armsUp:true});
+        cx.restore();
+      }
+    }
+    // door, wheels, lights, exhaust
+    cx.fillStyle='#0b2a3a'; cx.fillRect(x+22,y-18,6,12);
+    cx.fillStyle='#0d0b16'; cx.fillRect(x-22,y-6,9,7); cx.fillRect(x+13,y-6,9,7);
+    cx.fillStyle='#33333f'; cx.fillRect(x-20,y-4,5,3); cx.fillRect(x+15,y-4,5,3);
+    cx.fillStyle=bl?'#ffffff':'#888866'; cx.fillRect(x-30,y-13,2,3);
+    cx.fillStyle=bl?'#ff4f4f':'#661111'; cx.fillRect(x+28,y-13,2,3);
+    if(bl){ cx.fillStyle='#88888855'; cx.fillRect(x+31,y-8,3,3); cx.fillRect(x+35,y-11,2,2); }
+    return;
+  }
   cx.fillStyle='#f5d300'; cx.fillRect(x-22,y-18,44,15);
   cx.fillStyle='#fff7d0'; cx.fillRect(x-22,y-18,44,3);
   cx.fillStyle='#0b2a3a'; for(let i=0;i<4;i++) cx.fillRect(x-18+i*9,y-13,6,5);
@@ -1844,7 +1884,7 @@ function renderHUD(){
     });
   } else {
     cx.fillStyle='#00000099'; cx.fillRect(0,VH-15,VW,15);
-    txt('STEER: ← → / A · D / MOUSE      M: MUTE      P: PAUSE', VW/2, VH-12, 9, '#ffffffcc','center');
+    txt('STEER: ← → / A · D      M: MUTE      P: PAUSE', VW/2, VH-12, 9, '#ffffffcc','center');
   }
 }
 
@@ -1913,7 +1953,7 @@ function renderSelect(){
     txt('your lost mates — grab them!', tx2, ry+2, 7, '#ffffffcc'); }
   // avoid — crowds, obstacles, art cars
   ry+=gap2;
-  { drawRaver(cx,ix-6,ry+7,CHARS[7],0,{dim:0.55,armsUp:false,facing:'down'});
+  { drawRaver(cx,ix-6,ry+7,CHARS[7],0,{dim:0.55,armsUp:false,facing:'down',faceless:true});
     cx.fillStyle='#1e2a1e'; cx.fillRect(ix+6,ry-2,8,9);          // wee bin
     cx.fillStyle='#39ff14'; cx.fillRect(ix+5,ry-4,10,3);
     txt('AVOID', tx2, ry-9, 9, '#ff4f4f');
@@ -2047,18 +2087,19 @@ function renderWin(){
   cx.fillStyle='#13101e'; cx.fillRect(0,VH/2+34,VW,60);
   cx.fillStyle='#f5d30055';
   for(let i=0;i<9;i++) cx.fillRect(((i*70 - winT*90)%(VW+70)+VW+70)%(VW+70)-35, VH/2+58, 32,3);
-  // the bus, full of YOUR crew, rolling off
-  const bx=80+winT*34;
-  cx.save(); cx.translate(Math.min(bx,VW+120), VH/2+44); cx.scale(1.8,1.8);
-  drawBus(0,0);
-  // you + the friends you brought, bouncing in the windows
-  for(let i=0;i<Math.min(4,winPals.length);i++){
-    const p=winPals[i], wx=-18+i*9, wy=-13+Math.sin(G.t*6+i)*0.8;
-    cx.fillStyle=p.skin; cx.fillRect(wx+1,wy+1,4,4);
-    cx.fillStyle=p.hair; cx.fillRect(wx+1,wy,4,2);
-    cx.fillStyle='#241a38'; cx.fillRect(wx+2,wy+2.5,1,1); cx.fillRect(wx+4,wy+2.5,1,1);
-  }
+  // the bus, full of YOUR crew — actual characters in the windows
+  const headX=80+winT*55;
+  cx.save(); cx.translate(Math.min(headX,VW+150), VH/2+44); cx.scale(1.8,1.8);
+  drawBus(0,0,winPals);
   cx.restore();
+  // roll-call trailing behind the bus as it drives by
+  txt('THESE RAVERS MADE IT ON THE BUS', VW/2, VH/2+12, 9, '#2de2e6','center');
+  for(let i=0;i<winNames.length;i++){
+    const nx=headX-80-i*58;
+    if(nx<-50||nx>VW+60) continue;
+    const ny=VH/2+50+(i%2?10:-1)+Math.sin(G.t*4+i)*1.5;
+    txt(winNames[i], nx, ny, 9, ['#39ff14','#ff2d95','#00e5ff','#f5d300'][i%4],'center');
+  }
   if(winPals.length>4)
     txt(`+${winPals.length-4} more partying in the back`, VW/2, VH/2-31, 8, '#ffffffaa','center');
   const nw=VW<420;
