@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <title>RAVE TRAIN</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&display=swap" rel="stylesheet">
 <style>
   html,body{margin:0;padding:0;background:#07030f;height:100%;overflow:hidden;
     font-family:'Courier New',monospace;}
@@ -59,8 +62,8 @@ const choice=a=>a[Math.floor(Math.random()*a.length)];
 
 // ---------- characters (pixel ravers) ----------
 const CHARS = [
- {name:'NEON NIA',   skin:'#ffd9b3', hair:'#ff2d95', top:'#2de2e6', legs:'#241b3a', glow:'#39ff14', style:'mohawk'},
- {name:'BASS BOY',   skin:'#c68f59', hair:'#1b1b22', top:'#ff6d00', legs:'#1f2a44', glow:'#00e5ff', style:'cap', cap:'#3b82f6'},
+ {name:'KEVIN NGUYEN', skin:'#e3b486', hair:'#241812', top:'#16161e', legs:'#23232f', glow:'#39ff14', style:'part'},
+ {name:'TIFFANY TRAN', skin:'#e3b486', hair:'#f7d774', top:'#ff4f9a', legs:'#2a1b47', glow:'#00e5ff', style:'long'},
  {name:'TECHNO TESS',skin:'#ffe0c2', hair:'#00ff9f', top:'#0d0d12', legs:'#3a1b4f', glow:'#ff2d95', style:'bob'},
  {name:'GLOW JOE',   skin:'#8d5524', hair:'#2b1a0e', top:'#f5d300', legs:'#143c2b', glow:'#ff6d00', style:'afro'},
  {name:'KANDI KAI',  skin:'#f1c27d', hair:'#b14aed', top:'#ff4f9a', legs:'#11324d', glow:'#f5d300', style:'spiky'},
@@ -186,6 +189,11 @@ function hairDraw(P,pal,f){
     case 'buzz':
       P(f==='s'?-7:-8,-27,f==='s'?14:16,2,H);
       break;
+    case 'part':   // middle-part curtains
+      if(f==='s'){ P(-7,-28,14,3,H); P(-7,-25,3,5,H); P(4,-25,3,3,H); }
+      else if(f==='u'){ P(-8,-28,16,4,H); }
+      else { P(-8,-28,16,3,H); P(-8,-25,3,5,H); P(5,-25,3,5,H); P(-2,-25,1,1,H); P(1,-25,1,1,H); }
+      break;
     case 'twin':
       if(f==='s'){ P(-7,-28,14,3,H); P(-10,-27,3,10,H); P(-10,-28,3,2,GL); }
       else { P(-8,-28,16,3,H); P(-12,-26,3,10,H); P(9,-26,3,10,H); P(-12,-28,3,2,GL); P(9,-28,3,2,GL); }
@@ -247,7 +255,7 @@ let effects={};          // active powerups id->timeLeft
 let exitGate=null, exitArrowT=0;
 let transition=null, cutscene=null, flashT=0, gameOverInfo=null;
 let phone=null, friendDryT=0;   // group-chat intro · seconds since last friend found
-let winT=0, winCrew=0;          // victory screen
+let winT=0, winCrew=0, winPals=[];   // victory screen
 
 const SPACING=11;        // px between party members along trail
 const VISION=120;        // base fog radius
@@ -262,31 +270,36 @@ const OB_NAMES = { bar:'bar queue', loo:'porta-loos', speaker:'speaker stack', t
 function genWorld(stage, spawnFrac){
   // THE LAST SHUTTLE — a long car-park gauntlet, bus at the far end
   if(stage>=FINAL_STAGE){
-    // a single-screen-tall corridor: weave through EVERYONE to reach the bus
-    const W=3400, H=VH;
+    // THE LAST SHUTTLE — a HAND-AUTHORED gauntlet, identical every run.
+    // Slalom gates, pinch points, a centre blob, and a final dodge.
+    const W=3400, H=270;
     const w={W,H,stage, final:true, crowds:[], obstacles:[], friends:[], totems:[], lasers:[]};
-    w.spawn={x:80, y:H/2};
-    for(let i=0;i<26;i++){
-      const c={x:rnd(300,W-280), y:rnd(60,H-60), r:rnd(28,52), members:[]};
-      const n=Math.max(7,Math.floor(c.r/5));
-      for(let j=0;j<n;j++){ const a=rnd(0,TAU), d=Math.sqrt(Math.random())*c.r;
+    w.spawn={x:80, y:135};
+    const CR=[[350,70,45],[350,210,45],[650,135,50],[950,60,40],[950,200,40],
+              [1250,135,55],[1500,80,38],[1560,210,38],
+              [1810,40,26],[1810,135,40],[1810,240,26],          // the triple gate
+              [2100,90,45],[2100,220,35],[2400,135,60],
+              [2700,60,40],[2700,200,40],[3000,135,40]];
+    for(const [x,y,r] of CR){
+      const c={x,y,r,members:[]};
+      const n=Math.max(7,Math.floor(r/5));
+      for(let j=0;j<n;j++){
+        const a=(j/n)*TAU+hash2(x,j)*1.5, d=Math.sqrt(hash2(j,y))*r;
         c.members.push({x:c.x+Math.cos(a)*d, y:c.y+Math.sin(a)*d, hx:0, hy:0,
-          facing:choice(['down','left','right','up']), pal:choice(CHARS), ph:rnd(0,TAU)}); }
+          facing:['down','left','right','up'][j%4],
+          pal:CHARS[(j+Math.floor(x/97))%CHARS.length], ph:hash2(x,y+j)*TAU});
+      }
       w.crowds.push(c);
     }
-    const types=Object.keys(OB_DIMS);
-    for(let i=0;i<16;i++){
-      const t=types[i%types.length], d=OB_DIMS[t];
-      const p={x:rnd(330,W-320), y:rnd(45,H-45)};
-      if(w.crowds.some(c=>Math.hypot(c.x-p.x,c.y-p.y)<c.r+38)){ i--; continue; }
-      w.obstacles.push({x:p.x,y:p.y,w:d.w,h:d.h,type:t,ph:rnd(0,TAU)});
-    }
-    const deck=[...TOTEMS].sort(()=>Math.random()-0.5);
-    for(let i=0;i<9;i++){
-      const p=freeSpot(w,50); if(p.x<280){ i--; continue; }
-      w.totems.push({x:p.x,y:p.y,type:deck[i%deck.length],taken:false,ph:rnd(0,TAU)});
-    }
-    w.artcar={x:W*0.45, y:H/2, dir:0, t:rnd(1,4), ph:rnd(0,TAU)};
+    const OB=[['speaker',500,135],['bar',800,38],['loo',800,232],['tent',1100,60],
+              ['merch',1400,135],['bin',1650,40],['speaker',1950,225],['bar',2250,135],
+              ['loo',2550,38],['merch',2850,225],['bin',3150,135]];
+    for(const [t,x,y] of OB){ const d=OB_DIMS[t]; w.obstacles.push({x,y,w:d.w,h:d.h,type:t,ph:x%6}); }
+    // fixed totems — no Squad Flag in the car park
+    const TT=['sober','glow','water','torch','mum','signal','bass','sober'];
+    const TP=[[420,135],[700,70],[1150,210],[1500,145],[1815,90],[2080,70],[2420,60],[2950,200]];
+    TT.forEach((id,i)=>w.totems.push({x:TP[i][0],y:TP[i][1],type:TOTEMS.find(t=>t.id===id),taken:false,ph:i}));
+    w.artcars=[{x:1300,y:135,dir:0,t:2,ph:0},{x:2600,y:135,dir:Math.PI,t:4,ph:2.5}];
     return w;
   }
   const W=mapW(stage), H=mapH(stage);
@@ -338,12 +351,39 @@ function genWorld(stage, spawnFrac){
     const p=freeSpot(w,55);
     w.totems.push({x:p.x,y:p.y,type:deck[i%deck.length],taken:false,ph:rnd(0,TAU)});
   }
-  // EL PULPO — the flame-breathing art car, cruising the field
-  w.artcar={x:rnd(W*0.25,W*0.75), y:rnd(Math.max(220,H*0.45),H-120), dir:rnd(0,TAU), t:rnd(1.2,4), ph:rnd(0,TAU)};
-  if(Math.hypot(w.artcar.x-sp.x, w.artcar.y-sp.y)<240)
-    w.artcar.x = sp.x>W/2 ? Math.max(110,sp.x-300) : Math.min(W-110,sp.x+300);
+  // EL PULPO & FRIENDS — flame-breathing art cars, more each stage
+  const nCars = stage>=6?3 : stage>=3?2 : 1;
+  w.artcars=[];
+  for(let i=0;i<nCars;i++){
+    const car={x:rnd(W*0.2,W*0.8), y:rnd(Math.max(220,H*0.4),H-120), dir:rnd(0,TAU), t:rnd(1.2,4.6), ph:rnd(0,TAU)};
+    if(Math.hypot(car.x-sp.x,car.y-sp.y)<240)
+      car.x = sp.x>W/2 ? Math.max(110,sp.x-320) : Math.min(W-110,sp.x+320);
+    w.artcars.push(car);
+  }
   return w;
 }
+// nudge a just-landed friend out of crowds and obstacles so they're grabbable
+function settleFriend(f){
+  for(let k=0;k<8;k++){
+    let moved=false;
+    for(const c of world.crowds){
+      const d=Math.hypot(f.x-c.x,f.y-c.y);
+      if(d<c.r+16){
+        const a=d>0.1?angTo(c,f):rnd(0,TAU);
+        f.x=c.x+Math.cos(a)*(c.r+18); f.y=c.y+Math.sin(a)*(c.r+18); moved=true;
+      }
+    }
+    for(const o of world.obstacles){
+      if(Math.abs(f.x-o.x)<o.w/2+12 && Math.abs(f.y-o.y)<o.h/2+14){
+        const a=angTo(o,f);
+        f.x=o.x+Math.cos(a)*(o.w/2+18); f.y=o.y+Math.sin(a)*(o.h/2+18); moved=true;
+      }
+    }
+    f.x=clamp(f.x,30,world.W-30); f.y=clamp(f.y,30,world.H-30);
+    if(!moved) break;
+  }
+}
+
 function hitsObstacle(w,p,pad){
   return w.obstacles.some(o=>Math.abs(p.x-o.x)<o.w/2+pad && Math.abs(p.y-o.y)<o.h/2+pad);
 }
@@ -378,12 +418,12 @@ function startStage(stage, withCutscene, spawnFrac){
     // your whole crew comes with you — get them all on the bus
     const crew=Math.min(12, friendsNeeded(stage-1));
     for(let i=0;i<crew;i++) party.push({pal:choice(CHARS)});
-    world.timer=62;
+    world.timer=32;
     exitGate={x:world.W-90, y:world.H/2};
     player.dir=0;   // face the long road ahead
   }
-  camera.x=clamp(player.x-VW/2, -40, world.W-VW+40);
-  camera.y=clamp(player.y-VH/2, -40, world.H-VH+40);
+  camera.x = world.W<VW ? -(VW-world.W)/2 : clamp(player.x-VW/2, -40, world.W-VW+40);
+  camera.y = world.H<VH ? -(VH-world.H)/2 : clamp(player.y-VH/2, -40, world.H-VH+40);
   if(withCutscene){
     cutscene={t:0, phase:0, dancers:[]};
     const n=Math.min(friendsNeeded(stage-1)||6, 10);
@@ -404,7 +444,7 @@ function phoneStart(){
   if(world && world.final){
     phone={t:0, dur:3.8, beeped:[false,false],
       history:["it's time to go home","where's the kick ons??"],
-      msgs:["the LAST SHUTTLE leaves in 60 seconds!!","RUN. bring everyone."]};
+      msgs:["the LAST SHUTTLE leaves in 30 seconds!!","RUN. bring everyone."]};
     G.state='phone'; return;
   }
   const need=friendsNeeded(G.stage);
@@ -457,8 +497,9 @@ const BASSLINE=[0,null,0,12, null,0,10,null, 0,12,null,0, 3,null,15,12,
                 0,null,0,12, null,0,10,null, 7,12,null,5, 3,null,12,10];
 const DNBLINE=[0,0,3,5, 0,10,7,5];
 function beat(){
-  if(!AC||muted||G.state==='select') return;
+  if(!AC||muted) return;
   const t=AC.currentTime;
+  if(G.state==='select'||G.state==='win'){ chill(t); return; }
   const style=(G.stage-1)%3;
   const s=beatN%32, S=beatN%512;               // 2-bar groove inside a 32-bar phrase
   beatN++;
@@ -502,6 +543,36 @@ function beat(){
     if(s===30) stab(t, 440*Math.pow(2,key/12));
   }
 }
+// ---- chill mode: warm pads + half-time kick for the title & win screens ----
+const PADPROG=[0,8,3,10];
+function chill(t){
+  const cs=beatN++%128;
+  if(cs%32===0) pad(t, 110*Math.pow(2,PADPROG[(cs>>5)%4]/12));
+  if(cs%16===0) kickSoft(t);
+  if(cs%8===4) hat(t,0.025,false);
+  if(cs%16===10) hat(t,0.05,true);
+  if(cs%4===2 && hash2(cs,7)>0.55)
+    twinkle(t, 880*Math.pow(2,[0,3,7,10,12][Math.floor(hash2(cs,3)*5)]/12));
+}
+function pad(t,f){
+  [1,1.189,1.498,2].forEach(r=>{
+    const o=AC.createOscillator(),g=AC.createGain(),lp=AC.createBiquadFilter();
+    o.type='triangle'; o.frequency.value=f*r; o.detune.value=rnd(-7,7);
+    lp.type='lowpass'; lp.frequency.value=750;
+    g.gain.setValueAtTime(0.0001,t); g.gain.linearRampToValueAtTime(0.045,t+0.5);
+    g.gain.setValueAtTime(0.045,t+2.2); g.gain.linearRampToValueAtTime(0.0001,t+3.6);
+    o.connect(lp).connect(g).connect(AC.destination); o.start(t); o.stop(t+3.7);
+  });
+}
+function kickSoft(t){ const o=AC.createOscillator(),g=AC.createGain();
+  o.frequency.setValueAtTime(120,t); o.frequency.exponentialRampToValueAtTime(42,t+0.12);
+  g.gain.setValueAtTime(0.22,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.18);
+  o.connect(g).connect(AC.destination); o.start(t); o.stop(t+0.2);}
+function twinkle(t,f){ const o=AC.createOscillator(),g=AC.createGain();
+  o.type='sine'; o.frequency.value=f;
+  g.gain.setValueAtTime(0.05,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.5);
+  o.connect(g).connect(AC.destination); o.start(t); o.stop(t+0.55);}
+
 function snare(t,v){ const len=2200;
   const b=AC.createBuffer(1,len,AC.sampleRate),d=b.getChannelData(0);
   for(let i=0;i<len;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/len,1.6);
@@ -611,7 +682,7 @@ addEventListener('keyup',e=>keys[e.key]=false);
 cv.addEventListener('mousemove',e=>{
   const r=cv.getBoundingClientRect();
   mouse.x=(e.clientX-r.left)/r.width*VW; mouse.y=(e.clientY-r.top)/r.height*VH;
-  mouse.active=1.5;
+  mouse.active=1.5; mouse.sticky=true;   // desktop mouse steering never times out
 });
 let touchHeld=false, btnL=false, btnR=false;
 function pointerXY(e){
@@ -624,14 +695,16 @@ function btnRects(){
   return {L:{x:m,y:VH-s-m,w:s,h:s}, R:{x:VW-s-m,y:VH-s-m,w:s,h:s}};
 }
 const inRect=(p,b)=>p.x>=b.x&&p.x<=b.x+b.w&&p.y>=b.y&&p.y<=b.y+b.h;
+let lastTouchEvt=0;
 function readTouches(list){
   btnL=false; btnR=false; touchHeld=false;
+  lastTouchEvt=performance.now();
   const r=btnRects();
   for(const t of list){
     const p=pointerXY(t);
     if(G.state==='play' && inRect(p,r.L)) btnL=true;
     else if(G.state==='play' && inRect(p,r.R)) btnR=true;
-    else { mouse.x=p.x; mouse.y=p.y; touchHeld=true; mouse.active=1.5; }
+    else { mouse.x=p.x; mouse.y=p.y; touchHeld=true; mouse.active=1.5; mouse.sticky=false; }
   }
 }
 function pointerDown(mx,my){
@@ -662,6 +735,10 @@ cv.addEventListener('touchstart',e=>{ e.preventDefault(); audioInit();
 cv.addEventListener('touchmove',e=>{ e.preventDefault(); readTouches(e.touches); },{passive:false});
 cv.addEventListener('touchend',e=>{ e.preventDefault(); readTouches(e.touches);
   if(!touchHeld) mouse.active=Math.min(mouse.active,0.3); },{passive:false});
+// Android fires touchcancel (notifications, gestures, palm rejection) — without
+// this, button/steer state stays stuck and controls "go crazy"
+cv.addEventListener('touchcancel',e=>{ e.preventDefault();
+  btnL=false; btnR=false; touchHeld=false; mouse.active=0; },{passive:false});
 
 // ============================================================
 //  UPDATE
@@ -735,6 +812,12 @@ function update(dt){
   // flashlight zooms the camera out ~30%
   G.zoom=lerp(G.zoom||1, effects.torch?0.72:1, 1-Math.pow(0.05,dt));
 
+  // watchdog: if touch state claims to be held but no touch event has arrived
+  // in 3s, the browser ate a touchend — release everything
+  if((btnL||btnR||touchHeld) && performance.now()-lastTouchEvt>3000){
+    btnL=false; btnR=false; touchHeld=false; mouse.active=0;
+  }
+
   // ----- steering (game speeds up 30% per stage; turn scales to match) -----
   const smul=Math.min(Math.pow(1.3,G.stage-1),2.4);
   const turn=4.2*smul;
@@ -742,7 +825,7 @@ function update(dt){
   if(keys['ArrowRight']||keys['d']||btnR){ player.dir+=turn*dt; mouse.active=0; }
   if(touchHeld) mouse.active=1.5;
   if(mouse.active>0){
-    mouse.active-=dt;
+    if(!mouse.sticky) mouse.active-=dt;   // only touch steering decays
     const target=Math.atan2(mouse.y-VH/2, mouse.x-VW/2);
     const d=angDiff(player.dir,target);
     player.dir+=clamp(d, -turn*dt, turn*dt);
@@ -773,21 +856,22 @@ function update(dt){
   for(const c of world.crowds){
     if(Math.hypot(c.x-player.x,c.y-player.y)>c.r+20) continue;
     for(const m of c.members){
-      // bass drop pushes crowd away
+      // body odour shoves the crowd away — and they STAY shoved
       if(effects.bass){
         const d=Math.hypot(m.x+m.hx-player.x,m.y+m.hy-player.y);
-        if(d<80){ const a=angTo(player,{x:m.x+m.hx,y:m.y+m.hy});
-          m.hx+=Math.cos(a)*60*dt*(1-d/80)*10; m.hy+=Math.sin(a)*60*dt*(1-d/80)*10; }
-      } else { m.hx*=Math.pow(0.3,dt); m.hy*=Math.pow(0.3,dt); }
+        if(d<110){ const a=angTo(player,{x:m.x+m.hx,y:m.y+m.hy});
+          m.hx+=Math.cos(a)*60*dt*(1-d/110)*10; m.hy+=Math.sin(a)*60*dt*(1-d/110)*10;
+          m.hx=clamp(m.x+m.hx,16,world.W-16)-m.x;       // keep them inside the fence
+          m.hy=clamp(m.y+m.hy,16,world.H-16)-m.y; }
+      }
       if(player.invuln<=0 && Math.hypot(m.x+m.hx-player.x, m.y+m.hy-player.y)<7){
         hitPenalty('crashed into the crowd'); break;
       }
     }
   }
 
-  // ----- the art car cruises about, breathing fire -----
-  const ac=world.artcar;
-  if(ac){
+  // ----- the art cars cruise about, breathing fire -----
+  for(const ac of world.artcars||[]){
     ac.t+=dt;
     ac.dir+=Math.sin(G.t*0.4+ac.ph)*0.3*dt;
     ac.x+=Math.cos(ac.dir)*14*dt; ac.y+=Math.sin(ac.dir)*14*dt;
@@ -800,6 +884,7 @@ function update(dt){
       const a=angTo(ac,player);
       player.x=ac.x+Math.cos(a)*46; player.y=ac.y+Math.sin(a)*46;
       hitPenalty(flame?'got singed by the art car':'bumped the art car');
+      break;
     }
   }
 
@@ -824,6 +909,7 @@ function update(dt){
       f.x+=f.vx*dt; f.y+=f.vy*dt;
       f.vx*=Math.pow(0.05,dt); f.vy*=Math.pow(0.05,dt);
       f.x=clamp(f.x,30,world.W-30); f.y=clamp(f.y,30,world.H-30);
+      if(f.fly<=0) settleFriend(f);   // step clear of crowds & obstacles
     }
   }
 
@@ -853,7 +939,8 @@ function update(dt){
       tm.respawnT-=dt;
       if(tm.respawnT<=0){
         const p=freeSpot(world,55);
-        tm.x=p.x; tm.y=p.y; tm.type=choice(TOTEMS); tm.taken=false; tm.ph=rnd(0,TAU);
+        tm.x=p.x; tm.y=p.y; tm.taken=false; tm.ph=rnd(0,TAU);
+        tm.type=choice(world.final ? TOTEMS.filter(t=>t.id!=='flag') : TOTEMS);
       }
     }
   }
@@ -886,7 +973,11 @@ function update(dt){
   // ----- exit -----
   if(exitGate && Math.hypot(exitGate.x-player.x,exitGate.y-player.y)<16){
     sfx('exit');
-    if(world.final){ winCrew=party.length; winT=0; G.state='win'; }
+    if(world.final){
+      winCrew=party.length; winT=0;
+      winPals=[CHARS[G.charIdx], ...party.map(p=>p.pal)];
+      G.state='win';
+    }
     else beginTransition();
   }
 
@@ -927,8 +1018,11 @@ function partyPositions(){
 
 function updateCamera(dt){
   const Z=G.zoom||1, vw=VW/Z, vh=VH/Z;
-  camera.x=lerp(camera.x, clamp(player.x-vw/2, -40, world.W-vw+40), 1-Math.pow(0.001,dt));
-  camera.y=lerp(camera.y, clamp(player.y-vh/2, -40, world.H-vh+40), 1-Math.pow(0.001,dt));
+  // letterbox small worlds (e.g. the corridor finale on a tall phone)
+  const tx = world.W<vw ? -(vw-world.W)/2 : clamp(player.x-vw/2, -40, world.W-vw+40);
+  const ty = world.H<vh ? -(vh-world.H)/2 : clamp(player.y-vh/2, -40, world.H-vh+40);
+  camera.x=lerp(camera.x, tx, 1-Math.pow(0.001,dt));
+  camera.y=lerp(camera.y, ty, 1-Math.pow(0.001,dt));
 }
 
 // ----- transition: seamless slide to the next stage -----
@@ -1014,9 +1108,9 @@ function renderPlay(){
   // exit gate (in world — only visible if in fog hole, fine)
   if(exitGate) drawExit(exitGate.x,exitGate.y);
 
-  // the art car (between obstacles and friends)
-  if(world.artcar && world.artcar.x>sx-100 && world.artcar.x<sx+vw+100
-     && world.artcar.y>sy-100 && world.artcar.y<sy+vh+100) drawArtCar(world.artcar);
+  // the art cars (between obstacles and friends)
+  for(const ac of world.artcars||[])
+    if(ac.x>sx-100 && ac.x<sx+vw+100 && ac.y>sy-100 && ac.y<sy+vh+100) drawArtCar(ac);
 
   // friends — raving hard, glowsticks in the air (your people!)
   const fr=Math.floor(G.t*4)%2;
@@ -1123,9 +1217,9 @@ function renderPlay(){
       fx.arc(px/FOGS,py/FOGS,cl/FOGS, player.dir-half, player.dir+half);
       fx.closePath(); fx.fill();
     }
-    // the art car lights up the field around it (flares when it breathes fire)
-    if(world.artcar){
-      const ac=world.artcar, fl=(ac.t%5)<1;
+    // art cars light up the field around them (flaring when they breathe fire)
+    for(const ac of world.artcars||[]){
+      const fl=(ac.t%5)<1;
       const ax=(ac.x-sx)*Z, ay=(ac.y-16-sy)*Z;
       const ar=(fl? 150+Math.sin(G.t*30)*10 : 85)*Z;
       const g3=fx.createRadialGradient(ax/FOGS,ay/FOGS,ar*0.25/FOGS,ax/FOGS,ay/FOGS,ar/FOGS);
@@ -1448,6 +1542,13 @@ function txt(s,x,y,size,col,align){
   cx.fillStyle='#000'; cx.fillText(s,x+1,y+1);
   cx.fillStyle=col; cx.fillText(s,x,y);
 }
+// futuristic display font for titles & big moments
+function txtT(s,x,y,size,col,align){
+  cx.font=`900 ${size}px Orbitron,"Courier New",monospace`;
+  cx.textAlign=align||'left'; cx.textBaseline='top';
+  cx.fillStyle='#000'; cx.fillText(s,x+2,y+2);
+  cx.fillStyle=col; cx.fillText(s,x,y);
+}
 function renderHUD(){
   const need=friendsNeeded(G.stage);
   cx.fillStyle='#000000bb'; cx.fillRect(0,0,VW,17);
@@ -1485,7 +1586,7 @@ function renderHUD(){
     if(Math.floor(G.t*4)%2){ cx.fillStyle='#39ff14';
       for(const f of world.friends) cx.fillRect(X(f.x)-1,Yy(f.y)-1,3,3); }
     if(exitGate){ cx.fillStyle='#f5d300'; cx.fillRect(X(exitGate.x)-2,Yy(exitGate.y)-2,4,4); }
-    if(world.artcar){ cx.fillStyle='#ff8c2a'; cx.fillRect(X(world.artcar.x)-1,Yy(world.artcar.y)-1,3,3); }
+    for(const ac of world.artcars||[]){ cx.fillStyle='#ff8c2a'; cx.fillRect(X(ac.x)-1,Yy(ac.y)-1,3,3); }
     cx.fillStyle='#fff'; cx.fillRect(X(player.x)-1,Yy(player.y)-1,3,3);
     txt('PHONE SIGNAL', mx+mw/2, mY+mh+3, 7, '#b14aed','center');
   }
@@ -1507,7 +1608,7 @@ function renderHUD(){
   }
   if(G.paused){
     cx.fillStyle='#000000aa'; cx.fillRect(0,VH/2-30,VW,60);
-    txt('PAUSED', VW/2, VH/2-22, 18, '#fff','center');
+    txtT('PAUSED', VW/2, VH/2-22, 18, '#fff','center');
     txt('P RESUME · R RESTART RUN · Q QUIT TO GATES', VW/2, VH/2+6, 9, '#2de2e6','center');
   }
   if(TOUCH){
@@ -1545,7 +1646,9 @@ function renderSelect(){
   }
   renderLasers(0.1);
   const hue=['#ff2d95','#2de2e6','#39ff14','#f5d300'][Math.floor(G.t*4)%4];
-  txt('RAVE TRAIN', VW/2, 24, 32, hue, 'center');
+  cx.save(); cx.shadowColor=hue; cx.shadowBlur=16;
+  txtT('RAVE TRAIN', VW/2, 22, VW<420?25:32, hue, 'center');
+  cx.restore();
   if(VW<420){ // stacked tagline on phones — nothing cut off, nothing overlapped
     txt('find your friends', VW/2, 58, 9, '#ffffffcc','center');
     txt('build your train', VW/2, 72, 9, '#ffffffcc','center');
@@ -1660,8 +1763,8 @@ function renderFlash(){
   cx.fillStyle='#00000088'; cx.fillRect(0,VH/2-34,VW,68);
   const s=1+Math.sin(G.t*10)*0.04;
   cx.save(); cx.translate(VW/2,VH/2); cx.scale(s,s);
-  if(world.final) txt('CATCH THE SHUTTLE!', 0, -14, 24, '#f5d300','center');
-  else txt(`FIND ${friendsNeeded(G.stage)} FRIENDS!`, 0, -14, 24, '#39ff14','center');
+  if(world.final) txtT('CATCH THE SHUTTLE!', 0, -12, VW<420?15:20, '#f5d300','center');
+  else txtT(`FIND ${friendsNeeded(G.stage)} FRIENDS!`, 0, -12, VW<420?16:20, '#39ff14','center');
   cx.restore();
   txt(STAGE_NAMES[(G.stage-1)%STAGE_NAMES.length], VW/2, VH/2+14, 10, '#2de2e6','center');
   cx.globalAlpha=1;
@@ -1671,12 +1774,12 @@ function renderGameOver(){
   cx.fillStyle='#000000cc'; cx.fillRect(0,0,VW,VH);
   const cy=VH/2;
   if(gameOverInfo && gameOverInfo.bus){
-    txt('YOU MISSED', VW/2, cy-75, 22, '#ff4f4f','center');
-    txt('THE BUS!', VW/2, cy-49, 22, '#ff4f4f','center');
+    txtT('YOU MISSED', VW/2, cy-75, VW<420?15:18, '#ff4f4f','center');
+    txtT('THE BUS!', VW/2, cy-51, VW<420?15:18, '#ff4f4f','center');
     txt('the shuttle left without you...', VW/2, cy-15, 10, '#ffffffcc','center');
   } else {
-    txt("YOU'VE LOST ALL", VW/2, cy-75, 22, '#ff4f4f','center');
-    txt("YOUR FRIENDS!", VW/2, cy-49, 22, '#ff4f4f','center');
+    txtT("YOU'VE LOST ALL", VW/2, cy-75, VW<420?13:18, '#ff4f4f','center');
+    txtT("YOUR FRIENDS!", VW/2, cy-51, VW<420?13:18, '#ff4f4f','center');
     if(gameOverInfo) txt(`you ${gameOverInfo.what} while flying solo`, VW/2, cy-15, 10, '#ffffffcc','center');
   }
   if(gameOverInfo) txt(`stages reached: ${gameOverInfo.stage}   friends found: ${gameOverInfo.total}`, VW/2, cy+5, VW<420?8:10, '#2de2e6','center');
@@ -1694,18 +1797,23 @@ function renderWin(){
   cx.fillStyle='#13101e'; cx.fillRect(0,VH/2+34,VW,60);
   cx.fillStyle='#f5d30055';
   for(let i=0;i<9;i++) cx.fillRect(((i*70 - winT*90)%(VW+70)+VW+70)%(VW+70)-35, VH/2+58, 32,3);
-  // the bus, full of your crew, rolling off
+  // the bus, full of YOUR crew, rolling off
   const bx=80+winT*34;
   cx.save(); cx.translate(Math.min(bx,VW+120), VH/2+44); cx.scale(1.8,1.8);
   drawBus(0,0);
-  cx.restore();
-  // crew silhouettes bouncing in the windows
-  for(let i=0;i<Math.min(winCrew,4);i++){
-    const wx=Math.min(bx,VW+120)-31+i*16, wy=VH/2+44-23*1.8+Math.sin(G.t*6+i)*1.5;
-    cx.fillStyle=CHARS[i%CHARS.length].hair; cx.fillRect(wx,wy+18,6,4);
+  // you + the friends you brought, bouncing in the windows
+  for(let i=0;i<Math.min(4,winPals.length);i++){
+    const p=winPals[i], wx=-18+i*9, wy=-13+Math.sin(G.t*6+i)*0.8;
+    cx.fillStyle=p.skin; cx.fillRect(wx+1,wy+1,4,4);
+    cx.fillStyle=p.hair; cx.fillRect(wx+1,wy,4,2);
+    cx.fillStyle='#241a38'; cx.fillRect(wx+2,wy+2.5,1,1); cx.fillRect(wx+4,wy+2.5,1,1);
   }
+  cx.restore();
+  if(winPals.length>4)
+    txt(`+${winPals.length-4} more partying in the back`, VW/2, VH/2-31, 8, '#ffffffaa','center');
   const nw=VW<420;
-  txt('YOU CAUGHT THE LAST SHUTTLE!', VW/2, VH/2-99, nw?13:18, '#39ff14','center');
+  txtT('YOU CAUGHT', VW/2, VH/2-118, nw?14:18, '#39ff14','center');
+  txtT('THE LAST SHUTTLE!', VW/2, VH/2-96, nw?14:18, '#39ff14','center');
   txt('kick ons at your hotel!!', VW/2, VH/2-73, 11, '#2de2e6','center');
   txt(`crew on the bus: ${winCrew}   friends found all night: ${G.totalCollected}`, VW/2, VH/2-49, nw?8:10, '#f5d300','center');
   txt('THANKS FOR RAVING', VW/2, VH/2+80, 9, '#ffffff88','center');
