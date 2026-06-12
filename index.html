@@ -880,7 +880,25 @@ function readTouches(list){
     // touches outside the buttons do nothing — no accidental steering
   }
 }
+let debugTapN=0, debugTapT=0;
 function pointerDown(mx,my){
+  // secret: 5 quick taps in the top-left corner toggles debug mode
+  if(mx<70 && my<20){
+    const now=performance.now();
+    if(now-debugTapT>1500) debugTapN=0;
+    debugTapT=now;
+    if(++debugTapN>=5){
+      debugTapN=0; G.debug=!G.debug;
+      say(G.debug?'DEBUG ON · USE ‹ › TO JUMP STAGES':'DEBUG OFF','#ff6d00');
+    }
+    return;
+  }
+  // debug stage-jump buttons (touch)
+  if(G.debug && TOUCH && G.state==='play' && !G.paused){
+    const p={x:mx,y:my};
+    if(inRect(p,{x:VW/2-46,y:VH-44,w:42,h:24})){ startStage(Math.max(1,G.stage-1),false); return; }
+    if(inRect(p,{x:VW/2+4, y:VH-44,w:42,h:24})){ startStage(Math.min(FINAL_STAGE,G.stage+1),false); return; }
+  }
   if(G.state==='select'){
     const SC=selCards();
     for(let i=0;i<2;i++){ const c=SC.cards[i];
@@ -907,7 +925,7 @@ cv.addEventListener('mousedown',e=>{ audioInit(); const p=pointerXY(e); pointerD
 cv.addEventListener('touchstart',e=>{ e.preventDefault(); audioInit();
   readTouches(e.touches);
   const p=pointerXY(e.touches[0]);
-  if(G.state!=='play' || p.y<30 || G.paused) pointerDown(p.x,p.y);   // menus + pause taps
+  if(G.state!=='play' || p.y<30 || G.paused || G.debug) pointerDown(p.x,p.y);   // menus + pause + debug taps
 },{passive:false});
 cv.addEventListener('touchmove',e=>{ e.preventDefault(); readTouches(e.touches); },{passive:false});
 cv.addEventListener('touchend',e=>{ e.preventDefault(); readTouches(e.touches); },{passive:false});
@@ -1888,7 +1906,16 @@ function renderHUD(){
   cx.fillStyle='#000000bb'; cx.fillRect(0,0,VW,17);
   const narrow=VW<420;
   txt(narrow?`STAGE ${G.stage}`:`STAGE ${G.stage} · ${STAGE_NAMES[(G.stage-1)%STAGE_NAMES.length]}`,5,4,10,'#2de2e6');
-  if(G.debug) txt('DEBUG', 5, VH-26, 8, '#ff6d00');
+  if(G.debug){
+    txt('DEBUG', 5, VH-26, 8, '#ff6d00');
+    if(TOUCH){ // stage-jump buttons between the steer arrows
+      [[VW/2-46,'‹'],[VW/2+4,'›']].forEach(([bx,gl])=>{
+        cx.fillStyle='#ff6d0022'; cx.fillRect(bx,VH-44,42,24);
+        cx.strokeStyle='#ff6d0088'; cx.lineWidth=1; cx.strokeRect(bx+0.5,VH-43.5,41,23);
+        txt(gl==='‹'?'‹ STG':'STG ›', bx+21, VH-37, 9, '#ff6d00','center');
+      });
+    }
+  }
   if(world.final){
     txt(`CREW ${party.length}/${world.crewMax||18}`, VW-5,4,10, party.length?'#39ff14':'#ff4f4f','right');
     const tl=Math.max(0,world.timer||0);
