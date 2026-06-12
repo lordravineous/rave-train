@@ -1,0 +1,11 @@
+# macOS noise
+.DS_Store
+
+# private working files — NOT for the public site
+reels-scripts.md
+sfx/
+mainstage-anthem.html
+mainstage-demo.html
+
+# museum piece — flip this if you ever want /rave-train-v1.html playable on the site
+rave-train-v1.html

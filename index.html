@@ -15,15 +15,22 @@
     font:10px "Courier New",monospace;color:#ffffff44;text-decoration:none;
     letter-spacing:1px;z-index:10;}
   #cr:hover{color:#ffffff99;}
+  #kofi{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);
+    font:bold 12px "Courier New",monospace;color:#00cfff;text-decoration:none;
+    letter-spacing:1px;z-index:10;text-shadow:0 0 8px #00cfff55;}
+  #kofi:hover{color:#7fe7ff;}
   @media (max-width:600px){
     #cr{font-size:13px;bottom:10px;color:#ffffff77;
       background:#07030fd0;padding:3px 10px;border-radius:4px;}
+    #kofi{font-size:15px;bottom:42px;
+      background:#07030fd0;padding:4px 12px;border-radius:4px;}
   }
   canvas{image-rendering:pixelated;image-rendering:crisp-edges;background:#07030f;touch-action:none;}
 </style>
 </head>
 <body>
 <div id="wrap"><canvas id="screen"></canvas></div>
+<a id="kofi" href="https://ko-fi.com/ravinedj" target="_blank" rel="noopener">Enjoy this? Buy me a mysterious bag! 👜</a>
 <a id="cr" href="https://djravine.com" target="_blank" rel="noopener">© DJ RAVINE</a>
 <script>
 'use strict';
@@ -368,11 +375,8 @@ function genWorld(stage, spawnFrac){
               ['merch',1400,135],['bin',1650,40],['speaker',1950,225],['bar',2250,135],
               ['loo',2550,38],['merch',2850,225],['bin',3150,135]];
     for(const [t,x,y] of OB){ const d=OB_DIMS[t]; w.obstacles.push({x,y,w:d.w,h:d.h,type:t,ph:x%6}); }
-    // fixed totems — no Squad Flag in the car park
-    const TT=['sober','glow','torch','mum','signal','bass','shield'];
-    const TP=[[420,135],[700,70],[1500,145],[1815,90],[2080,70],[2420,60],[2950,200]];
-    TT.forEach((id,i)=>w.totems.push({x:TP[i][0],y:TP[i][1],type:TOTEMS.find(t=>t.id===id),taken:false,ph:i}));
-    w.baggies=[{x:1150,y:210,taken:false,respawnT:0,ph:1},{x:2480,y:205,taken:false,respawnT:0,ph:3}];
+    // NO powerups in the finale — a pure, even gauntlet (leaderboard-ready)
+    w.baggies=[];
     w.artcars=[{x:1300,y:135,dir:0,t:2,ph:0,kind:0},{x:2600,y:135,dir:Math.PI,t:4,ph:2.5,kind:1}];
     return w;
   }
@@ -496,7 +500,7 @@ function startStage(stage, withCutscene, spawnFrac){
     // your whole crew comes with you — get them all on the bus
     const crew=Math.min(12, friendsNeeded(stage-1));
     for(let i=0;i<crew;i++) party.push({pal:choice(CHARS)});
-    world.timer=32;
+    world.timer=30;
     exitGate={x:world.W-90, y:world.H/2};
     player.dir=0;   // face the long road ahead
   }
@@ -969,7 +973,7 @@ function update(dt){
   // a mate pings you if you haven't found anyone in a while
   if(world.friends.length){
     friendDryT+=dt;
-    if(friendDryT>15 && friendDryT-dt<=15){ say('YOUR MATE PINGS THEIR LOCATION!','#39ff14'); sfx('beep'); }
+    if(friendDryT>15 && friendDryT-dt<=15){ say('YOUR FRIEND PINGS THEIR LOCATION!','#39ff14'); sfx('beep'); }
   } else friendDryT=0;
 
   // ----- effects tick -----
@@ -1237,11 +1241,14 @@ function hash2(i,j){ const s=Math.sin(i*127.1+j*311.7)*43758.5453; return s-Math
 const ease=t=>t<0.5?2*t*t:1-Math.pow(-2*t+2,2)/2;
 
 const crEl=document.getElementById('cr');
-let crShown=null;
+const kofiEl=document.getElementById('kofi');
+let crShown=null, kofiShown=null;
 function render(){
-  // copyright link only on menu screens — never a tap hazard mid-game
+  // links only on menu screens — never a tap hazard mid-game
   const showCr = G.state==='select'||G.state==='win'||G.state==='gameover';
   if(showCr!==crShown){ crShown=showCr; if(crEl) crEl.style.display=showCr?'block':'none'; }
+  const showKofi = G.state==='select'||G.state==='win';
+  if(showKofi!==kofiShown){ kofiShown=showKofi; if(kofiEl) kofiEl.style.display=showKofi?'block':'none'; }
   cx.setTransform(PIX,0,0,PIX,0,0);
   cx.fillStyle='#07030f'; cx.fillRect(0,0,VW,VH);
   switch(G.state){
