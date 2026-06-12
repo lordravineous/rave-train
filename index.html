@@ -17,12 +17,12 @@
   #cr:hover{color:#ffffff99;}
   #kofi{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);
     font:bold 12px "Courier New",monospace;color:#00cfff;text-decoration:none;
-    letter-spacing:1px;z-index:10;text-shadow:0 0 8px #00cfff55;}
+    letter-spacing:1px;z-index:10;text-shadow:0 0 8px #00cfff55;white-space:nowrap;}
   #kofi:hover{color:#7fe7ff;}
   @media (max-width:600px){
-    #cr{font-size:13px;bottom:10px;color:#ffffff77;
+    #cr{font-size:12px;bottom:8px;color:#ffffff77;
       background:#07030fd0;padding:3px 10px;border-radius:4px;}
-    #kofi{font-size:15px;bottom:42px;
+    #kofi{font-size:13px;bottom:36px;
       background:#07030fd0;padding:4px 12px;border-radius:4px;}
   }
   canvas{image-rendering:pixelated;image-rendering:crisp-edges;background:#07030f;touch-action:none;}
@@ -371,13 +371,18 @@ function genWorld(stage, spawnFrac){
       }
       w.crowds.push(c);
     }
-    const OB=[['speaker',500,135],['bar',800,38],['loo',800,232],['tent',1100,60],
-              ['merch',1400,135],['bin',1650,40],['speaker',1950,225],['bar',2250,135],
-              ['loo',2550,38],['merch',2850,225],['bin',3150,135]];
+    const OB=[['speaker',500,135],['bin',430,135],['tent',620,40],['bar',800,38],['loo',800,232],
+              ['tent',1100,60],['speaker',1250,40],['merch',1400,135],['bin',1650,40],['loo',1700,230],
+              ['speaker',1950,225],['bin',2000,70],['bar',2250,135],['merch',2480,40],
+              ['loo',2550,38],['merch',2850,225],['bar',2950,230],['bin',3150,135]];
     for(const [t,x,y] of OB){ const d=OB_DIMS[t]; w.obstacles.push({x,y,w:d.w,h:d.h,type:t,ph:x%6}); }
     // NO powerups in the finale — a pure, even gauntlet (leaderboard-ready)
     w.baggies=[];
-    w.artcars=[{x:1300,y:135,dir:0,t:2,ph:0,kind:0},{x:2600,y:135,dir:Math.PI,t:4,ph:2.5,kind:1}];
+    // four art cars patrolling their own zones
+    w.artcars=[{x:700, y:135,dir:0,        t:2,  ph:0,  kind:0},
+               {x:1500,y:80, dir:Math.PI,  t:3.5,ph:1.7,kind:1},
+               {x:2300,y:190,dir:0,        t:1,  ph:3.1,kind:2},
+               {x:2950,y:120,dir:Math.PI,  t:4.5,ph:4.4,kind:0}];
     return w;
   }
   const W=mapW(stage), H=mapH(stage);
@@ -2062,7 +2067,7 @@ function renderSelect(){
     txt('POWERUPS', tx2, ry-9, 9, '#f5d300');
     txt('totems & mysterious bags', tx2, ry+2, 7, '#ffffffcc'); }
 
-  txt('walls & crowds scatter half your crew · alone + hit = game over', VW/2, VW<420?VH-34:VH-11, VW<420?7:8, '#ffffff99','center');
+  txt('walls & crowds scatter half your crew · alone + hit = game over', VW/2, VW<420?VH-72:VH-11, VW<420?7:8, '#ffffff99','center');
 }
 
 function renderCutscene(){
