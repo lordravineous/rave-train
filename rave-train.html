@@ -233,7 +233,7 @@ const TOTEMS = [
  {id:'bass',  name:'FESTIVAL BO',   col:'#a3e635', dur:15, msg:'You smell! The crowd backs off!'},
  {id:'torch', name:'PHONE TORCH',   col:'#ff6d00', dur:18, msg:'Your pupils are huge lmao'},
  {id:'signal',name:'WIFI CONNECTED',col:'#b14aed', dur:25, msg:'Maps is working again!'},
- {id:'mum',   name:'RAVE MUM',      col:'#ff8fab', dur:8,  msg:'You are safe. Everything is going to be okay'},
+ {id:'mum',   name:'RAVE MOM',      col:'#ff8fab', dur:8,  msg:'You are safe. Everything is going to be okay'},
  {id:'flag',  name:'SQUAD FLAG',    col:'#ffffff', dur:12, msg:'Raise it so they can find you!'},
  {id:'shield',name:'HYDRATION PACK',col:'#00e5ff', dur:0,  msg:'Water is life!'},
 ];
@@ -551,7 +551,7 @@ function say(txt,col,sub){ G.msgs.push({txt,col:col||'#fff',sub,t:3.2}); if(G.ms
 // ============================================================
 let AC=null, muted=false, beatTimer=null, beatN=0, curTempo=0;
 // per-arena tempos: rainbow road · subterra · mainstage · grid · canopy · spire · kick dome · shuttle
-const BPMS=[138,140,132,132,174,145,160,190];
+const BPMS=[138,140,128,132,174,145,160,190];
 function setTempo(bpm){
   if(!AC || bpm===curTempo) return;
   curTempo=bpm;
@@ -575,6 +575,19 @@ document.addEventListener('visibilitychange',()=>{
 const BASSLINE=[0,null,0,12, null,0,10,null, 0,12,null,0, 3,null,15,12,
                 0,null,0,12, null,0,10,null, 7,12,null,5, 3,null,12,10];
 const DNBLINE=[0,0,3,5, 0,10,7,5];
+// ---- MAINSTAGE theme (A minor, 128, Am-F-C-G) ----
+const NOTE={C2:65.41,F2:87.31,G2:98.00,A2:110.00,F4:349.23,G4:392.00,A4:440.00,
+            B4:493.88,C5:523.25,D5:587.33,E5:659.25,G5:783.99};
+const MS_CH=['Am','F','C','G'];
+const MS_ROOT={Am:'A2',F:'F2',C:'C2',G:'G2'};
+const MS_BLIP={Am:'A4',F:'F4',C:'C5',G:'G4'};
+const MS_LEAD=[
+ ['A4',null,'C5',null,'E5',null,'G5',null,'E5',null,null,null,'C5',null,'D5',null],
+ ['A4',null,'C5',null,'E5',null,'G5',null,'E5',null,null,null,'C5',null,'D5',null],
+ ['A4',null,'C5',null,'E5',null,'G5',null,'E5',null,null,null,'C5',null,'D5',null],
+ ['B4',null,'C5',null,'D5',null,'E5',null,'G5',null,'E5',null,'D5',null,'C5',null]];
+const MS_ARP={Am:['A4','C5','E5','C5'], F:['F4','A4','C5','A4'],
+              C:['C5','E5','G5','E5'],  G:['G4','B4','D5','B4']};
 function beat(){
   if(!AC||muted) return;
   const t=AC.currentTime;
@@ -617,17 +630,17 @@ function beat(){
     if(s%2===0) acid(t, 55*Math.pow(2,key/12), 0.18);   // the wobble
     if(s%4===2) hat(t,0.05,false);
     if(s%16===14) hat(t,0.1,true);
-  } else if(stg===3){                          // MAINSTAGE — EDM big room, 132, BIG kicks
-    if(s%4===0){ kickDist(t); sub(t, 55*Math.pow(2,key/12)); }
-    if(s%4===2){ hat(t,0.14,true); houseBass(t, 55*Math.pow(2,key/12)); }
-    if(s%2===1) hat(t,0.04,false);
-    if(s%8===4) clap(t);
-    const chords=[0,0,5,7];                    // steady chord stabs per half-bar
-    if(s%8===0) pluck(t, 220*Math.pow(2,(key+chords[(s>>3)%4])/12));
-    const riff=[12,null,15,null, 12,null,10,12];   // one simple repeating hook
-    const rn=riff[(s>>1)%8];
-    if(s%2===0 && rn!==null) twinkle(t, 440*Math.pow(2,(key+rn)/12), 0.05);
-    if(s%32===0) pad(t, 110*Math.pow(2,key/12));
+  } else if(stg===3){                          // MAINSTAGE — A minor big room, 128
+    const tb=(S>>4)%16, sb=S%16, ch=MS_CH[tb%4];
+    if(sb%4===0) kickDist(t);                  // x---x---x---x---
+    if(sb===4||sb===12) clap(t);               // ----x-------x---
+    if(sb%4===2) hat(t,0.04,false);            // --x---x---x---x-
+    if(sb===6||sb===14) hat(t,0.13,true);      // ------x-------x-
+    if(sb===7||sb===15) blip(t, NOTE[MS_BLIP[ch]]*2);  // -------x-------x
+    if(sb%4===2) houseBass(t, NOTE[MS_ROOT[ch]]);      // offbeat festival bass
+    const ln=MS_LEAD[tb%4][sb];
+    if(ln) lead(t, NOTE[ln]);                  // soft big-room lead
+    if(tb>=8){ const ap=MS_ARP[ch][sb%4]; twinkle(t, NOTE[ap], 0.025); } // arp from bar 9
   } else if(stg===4){                          // THE GRID — acid techno, 132
     if(s%8===0) kick(t);
     if(s%8===4) clap(t);
@@ -679,6 +692,20 @@ function pluck(t,f){ const o=AC.createOscillator(),g=AC.createGain(),lp=AC.creat
   o.type='triangle'; o.frequency.value=f*2; lp.type='lowpass'; lp.frequency.value=1800;
   g.gain.setValueAtTime(0.08,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.22);
   o.connect(lp).connect(g).connect(AC.destination); o.start(t); o.stop(t+0.24);}
+// softBigRoomLead — two gently detuned saws through a lowpass
+function lead(t,f){
+  [-8,8].forEach(d=>{
+    const o=AC.createOscillator(),g=AC.createGain(),lp=AC.createBiquadFilter();
+    o.type='sawtooth'; o.frequency.value=f; o.detune.value=d;
+    lp.type='lowpass'; lp.frequency.value=1500;
+    g.gain.setValueAtTime(0.05,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.28);
+    o.connect(lp).connect(g).connect(AC.destination); o.start(t); o.stop(t+0.3);
+  });}
+// quiet arcade blip
+function blip(t,f){ const o=AC.createOscillator(),g=AC.createGain();
+  o.type='square'; o.frequency.value=f;
+  g.gain.setValueAtTime(0.045,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.07);
+  o.connect(g).connect(AC.destination); o.start(t); o.stop(t+0.08);}
 function pad(t,f){
   [1,1.189,1.498,2].forEach(r=>{
     const o=AC.createOscillator(),g=AC.createGain(),lp=AC.createBiquadFilter();
@@ -834,6 +861,10 @@ function btnRects(){
   return {L:{x:m,y:VH-s-m,w:s,h:s}, R:{x:VW-s-m,y:VH-s-m,w:s,h:s}};
 }
 const inRect=(p,b)=>p.x>=b.x&&p.x<=b.x+b.w&&p.y>=b.y&&p.y<=b.y+b.h;
+function pauseBtns(){
+  const w=132,h=24,x=VW/2-w/2;
+  return {resume:{x,y:VH/2-2,w,h}, restart:{x,y:VH/2+28,w,h}, quit:{x,y:VH/2+58,w,h}};
+}
 let lastTouchEvt=0;
 function readTouches(list){
   btnL=false; btnR=false;
@@ -856,8 +887,17 @@ function pointerDown(mx,my){
   else if(G.state==='gameover'||G.state==='win') G.state='select';
   else if(G.state==='phone'){ phone.t=Math.max(phone.t,phone.dur); }
   else if(G.state==='play'){
-    if(TOUCH && my<18 && Math.abs(mx-VW/2)<26){ G.paused=!G.paused; return; }  // pause button
-    if(G.paused){ G.paused=false; return; }                 // tap anywhere resumes
+    if(G.paused){
+      if(TOUCH){   // on-screen pause menu
+        const pb=pauseBtns(), p={x:mx,y:my};
+        if(inRect(p,pb.resume)){ G.paused=false; return; }
+        if(inRect(p,pb.restart)){ G.paused=false; G.totalCollected=0; startStage(1,false); return; }
+        if(inRect(p,pb.quit)){ G.paused=false; G.state='select'; return; }
+        return;    // stray taps do nothing while the menu is up
+      }
+      G.paused=false; return;
+    }
+    if(TOUCH && my<18 && Math.abs(mx-VW/2)<26){ G.paused=true; return; }  // pause button
   }
 }
 cv.addEventListener('mousedown',e=>{ audioInit(); const p=pointerXY(e); pointerDown(p.x,p.y); });
@@ -1440,13 +1480,15 @@ function renderPlay(){
     }
     cx.restore();
 
-    // arrows: ride the vision boundary until the target is INSIDE your vision
-    const visR=VISION*(lit?1.8:1)*0.95;
-    if(exitGate) edgeArrow(exitGate,'#f5d300',px,py,R,visR);
+    // arrows: always hug the BASE vision ring (not the enlarged one),
+    // hidden once the target is actually inside vision
+    const visR=VISION*(lit?1.8:1)*(effects.bagfast?1.5:1)*0.95;
+    const arrowR=VISION*Z;
+    if(exitGate) edgeArrow(exitGate,'#f5d300',px,py,arrowR,visR);
     if((effects.sober || friendDryT>15) && !exitGate && world.friends.length){
       let best=null,bd=1e9;
       for(const f of world.friends){ const d=Math.hypot(f.x-player.x,f.y-player.y); if(d<bd){bd=d;best=f;} }
-      if(best) edgeArrow(best,'#39ff14',px,py,R,visR);
+      if(best) edgeArrow(best,'#39ff14',px,py,arrowR,visR);
     }
   }
 }
@@ -1913,9 +1955,22 @@ function renderHUD(){
     cx.globalAlpha=1;
   }
   if(G.paused){
-    cx.fillStyle='#000000aa'; cx.fillRect(0,VH/2-30,VW,60);
-    txtT('PAUSED', VW/2, VH/2-22, 18, '#fff','center');
-    txt('P RESUME · R RESTART RUN · Q QUIT TO GATES', VW/2, VH/2+6, 9, '#2de2e6','center');
+    if(TOUCH){
+      cx.fillStyle='#000000cc'; cx.fillRect(0,VH/2-40,VW,134);
+      txtT('PAUSED', VW/2, VH/2-32, 18, '#fff','center');
+      const pb=pauseBtns(), labels={resume:'RESUME',restart:'RESTART RUN',quit:'QUIT TO GATES'};
+      for(const k of ['resume','restart','quit']){
+        const b=pb[k];
+        cx.fillStyle='#ffffff1c'; cx.fillRect(b.x,b.y,b.w,b.h);
+        cx.strokeStyle=k==='resume'?'#39ff14':'#ffffff55'; cx.lineWidth=1;
+        cx.strokeRect(b.x+0.5,b.y+0.5,b.w-1,b.h-1);
+        txt(labels[k], VW/2, b.y+7, 10, k==='resume'?'#39ff14':'#fff','center');
+      }
+    } else {
+      cx.fillStyle='#000000aa'; cx.fillRect(0,VH/2-30,VW,60);
+      txtT('PAUSED', VW/2, VH/2-22, 18, '#fff','center');
+      txt('P RESUME · R RESTART RUN · Q QUIT TO GATES', VW/2, VH/2+6, 9, '#2de2e6','center');
+    }
   }
   if(TOUCH){
     // big steer buttons
@@ -1997,7 +2052,7 @@ function renderSelect(){
     drawRaver(cx,ix,ry+7,CHARS[4],Math.floor(G.t*4)%2,{armsUp:true,facing:'down'});
     if(Math.sin(G.t*3)>0.3){ cx.fillStyle='#fff'; cx.fillRect(ix+6,ry-13,1,3); cx.fillRect(ix+6,ry-9,1,1); }
     txt('FRIENDS', tx2, ry-9, 9, '#39ff14');
-    txt('your lost mates — grab them!', tx2, ry+2, 7, '#ffffffcc'); }
+    txt('your lost friends — grab them', tx2, ry+2, 7, '#ffffffcc'); }
   // avoid — crowds, obstacles, art cars
   ry+=gap2;
   { drawRaver(cx,ix-6,ry+7,CHARS[7],0,{dim:0.55,armsUp:false,facing:'down',faceless:true});
