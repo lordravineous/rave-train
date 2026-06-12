@@ -26,12 +26,61 @@
       background:#07030fd0;padding:4px 12px;border-radius:4px;}
   }
   canvas{image-rendering:pixelated;image-rendering:crisp-edges;background:#07030f;touch-action:none;}
+  /* ---- THE LAST SHUTTLE leaderboard ---- */
+  #lbBtn{position:fixed;top:10px;right:12px;display:none;cursor:pointer;
+    font:bold 12px "Courier New",monospace;color:#f5d300;text-decoration:none;
+    letter-spacing:1px;z-index:10;text-shadow:0 0 8px #f5d30055;
+    background:#07030fd0;padding:4px 10px;border-radius:4px;border:1px solid #f5d30044;}
+  #lbBtn:hover{color:#fff27a;}
+  #lb{position:fixed;inset:0;display:none;z-index:20;background:#07030fcc;
+    align-items:center;justify-content:center;}
+  #lbPanel{background:#0d0820;border:2px solid #ff2d95;border-radius:8px;
+    box-shadow:0 0 24px #ff2d9566;padding:18px 22px;width:min(340px,88vw);
+    max-height:84vh;overflow-y:auto;color:#fff;text-align:center;}
+  #lbPanel h2{font-family:'Orbitron',monospace;font-size:16px;color:#39ff14;
+    margin:0 0 2px;letter-spacing:2px;text-shadow:0 0 10px #39ff1488;}
+  #lbPanel .sub{font-size:11px;color:#2de2e6;margin:0 0 12px;}
+  #lbEntry{margin:10px 0 4px;}
+  #lbName{width:120px;background:#07030f;border:2px solid #00e5ff;border-radius:4px;
+    color:#f5d300;font:bold 22px 'Courier New',monospace;text-align:center;
+    letter-spacing:6px;padding:6px 0;text-transform:uppercase;outline:none;}
+  #lbName:focus{border-color:#f5d300;}
+  .lbB{display:inline-block;margin:10px 5px 0;padding:7px 16px;cursor:pointer;border-radius:4px;
+    font:bold 12px 'Courier New',monospace;letter-spacing:1px;border:1px solid;}
+  #lbGo{background:#ff2d95;border-color:#ff2d95;color:#fff;}
+  #lbGo:disabled{opacity:.5;cursor:default;}
+  #lbSkip,#lbClose{background:none;border-color:#ffffff44;color:#ffffffaa;}
+  #lbMsg{font-size:11px;min-height:14px;margin-top:8px;color:#ff6d00;}
+  #lbList{list-style:none;margin:8px 0 0;padding:0;font-size:13px;text-align:left;}
+  #lbList li{display:flex;gap:8px;padding:3px 6px;border-radius:3px;}
+  #lbList li:nth-child(odd){background:#ffffff0a;}
+  #lbList li.me{background:#39ff1422;color:#39ff14;}
+  #lbList .rk{width:26px;color:#2de2e6;text-align:right;}
+  #lbList .nm{flex:1;letter-spacing:2px;}
+  #lbList .tm{color:#f5d300;}
 </style>
 </head>
 <body>
 <div id="wrap"><canvas id="screen"></canvas></div>
 <a id="kofi" href="https://ko-fi.com/ravinedj" target="_blank" rel="noopener">Enjoy this? Buy me a mysterious bag! 👜</a>
 <a id="cr" href="https://djravine.com" target="_blank" rel="noopener">© DJ RAVINE</a>
+<a id="lbBtn">🏆 LAST SHUTTLE</a>
+<div id="lb">
+  <div id="lbPanel">
+    <h2>THE LAST SHUTTLE</h2>
+    <p class="sub">full-bus club · 18/18 only</p>
+    <div id="lbEntry" style="display:none">
+      <div style="font-size:12px;color:#39ff14;margin-bottom:8px">FULL BUS! ENTER YOUR RAVE TAG</div>
+      <input id="lbName" maxlength="5" autocomplete="off" spellcheck="false" placeholder="AAAAA">
+      <br>
+      <button class="lbB" id="lbGo">SUBMIT</button>
+      <button class="lbB" id="lbSkip">SKIP</button>
+    </div>
+    <div id="lbMsg"></div>
+    <ol id="lbList"></ol>
+    <button class="lbB" id="lbClose">CLOSE</button>
+  </div>
+</div>
 <script>
 'use strict';
 // ============================================================
@@ -41,6 +90,10 @@ let VW = 480, VH = 270;                   // logical pixel resolution (dynamic!)
 const PIX = 2;                            // internal supersample — doubles sprite pixel density
 const FOGS = 4;                           // fog canvas downscale (chunky edges)
 const TOUCH = 'ontouchstart' in window;   // phones & tablets get on-screen buttons
+// THE LAST SHUTTLE global leaderboard — paste your Cloudflare Worker URL here.
+// Leave empty to disable all leaderboard features. See leaderboard/DEPLOY.md.
+const LB_URL = '';                        // e.g. 'https://rave-train-leaderboard.yourname.workers.dev'
+const LB_QUALIFY = 18;                    // full bus or nothing
 const cv = document.getElementById('screen');
 const cx = cv.getContext('2d');
 const fogC = document.createElement('canvas');
@@ -821,10 +874,80 @@ function sfx(kind){
 }
 
 // ============================================================
+//  THE LAST SHUTTLE — GLOBAL LEADERBOARD
+//  full-bus finishes (18/18) only · backend: Cloudflare Worker
+// ============================================================
+let lbOpen=false, lbQualified=false, lbPrompted=false, lbSubmitted=false;
+const lbEl=document.getElementById('lb'), lbBtnEl=document.getElementById('lbBtn'),
+      lbEntryEl=document.getElementById('lbEntry'), lbNameEl=document.getElementById('lbName'),
+      lbGoEl=document.getElementById('lbGo'), lbSkipEl=document.getElementById('lbSkip'),
+      lbCloseEl=document.getElementById('lbClose'), lbMsgEl=document.getElementById('lbMsg'),
+      lbListEl=document.getElementById('lbList');
+
+// signature so casual cheaters can't just curl a fake time (matches the worker)
+function lbSig(n,t){ let h=0x811c9dc5; const s=n+'|'+t+'|LSTSHTL-9000';
+  for(let i=0;i<s.length;i++){ h^=s.charCodeAt(i); h=Math.imul(h,0x01000193)>>>0; }
+  return h.toString(36); }
+
+function lbFmt(ms){ return (ms/1000).toFixed(2)+'s'; }
+function lbRenderList(board, mine){
+  lbListEl.innerHTML='';
+  if(!board || !board.length){ lbListEl.innerHTML='<li><span class="nm">no full buses yet — be the first!</span></li>'; return; }
+  board.forEach((e,i)=>{
+    const li=document.createElement('li');
+    if(mine && e.n===mine.n && e.t===mine.t) li.className='me';
+    li.innerHTML=`<span class="rk">${i+1}.</span><span class="nm"></span><span class="tm">${lbFmt(e.t)}</span>`;
+    li.querySelector('.nm').textContent=e.n;   // never trust names as HTML
+    lbListEl.appendChild(li);
+  });
+}
+function lbShow(entry){
+  if(!LB_URL) return;
+  lbOpen=true; lbEl.style.display='flex';
+  lbEntryEl.style.display=entry?'block':'none';
+  lbMsgEl.textContent=''; lbMsgEl.style.color='#ff6d00';
+  if(entry){ lbNameEl.value=localStorage.getItem('lbName')||''; setTimeout(()=>lbNameEl.focus(),50); }
+  lbListEl.innerHTML='<li><span class="nm">loading…</span></li>';
+  fetch(LB_URL+'/scores').then(r=>r.json()).then(d=>lbRenderList(d.board))
+    .catch(()=>{ lbListEl.innerHTML='<li><span class="nm">couldn\'t reach the board 😢</span></li>'; });
+}
+function lbHide(){ lbOpen=false; lbEl.style.display='none'; }
+async function lbSubmit(){
+  const name=lbNameEl.value.toUpperCase().replace(/[^A-Z0-9]/g,'');
+  if(name.length<2){ lbMsgEl.textContent='2-5 letters or numbers'; return; }
+  const t=Math.round(winTime*1000);
+  lbGoEl.disabled=true; lbMsgEl.textContent='submitting…';
+  try{
+    const r=await fetch(LB_URL+'/submit',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({n:name,t,s:lbSig(name,t)})});
+    const d=await r.json();
+    if(d.ok){
+      lbSubmitted=true; lbEntryEl.style.display='none';
+      localStorage.setItem('lbName',name);
+      lbMsgEl.style.color='#39ff14';
+      lbMsgEl.textContent = d.pb ? `LOCKED IN — RANK #${d.rank}!` : `not a PB — your best holds rank #${d.rank}`;
+      lbRenderList(d.board,{n:name,t});
+      sfx('totem');
+    } else lbMsgEl.textContent=d.error||'something went wrong';
+  }catch{ lbMsgEl.textContent='network error — try again'; }
+  lbGoEl.disabled=false;
+}
+if(lbEl){
+  lbNameEl.addEventListener('input',()=>{ lbNameEl.value=lbNameEl.value.toUpperCase().replace(/[^A-Z0-9]/g,''); });
+  lbNameEl.addEventListener('keydown',e=>{ e.stopPropagation(); if(e.key==='Enter') lbSubmit(); });
+  lbGoEl.addEventListener('click',lbSubmit);
+  lbSkipEl.addEventListener('click',()=>{ lbEntryEl.style.display='none'; });
+  lbCloseEl.addEventListener('click',lbHide);
+  lbBtnEl.addEventListener('click',()=>lbShow(false));
+  lbEl.addEventListener('mousedown',e=>{ if(e.target===lbEl) lbHide(); });
+}
+
+// ============================================================
 //  INPUT
 // ============================================================
 const keys={};
 addEventListener('keydown',e=>{
+  if(lbOpen){ if(e.key==='Escape') lbHide(); return; }   // leaderboard overlay owns the keyboard
   keys[e.key]=true; audioInit();
   if(e.key==='m'||e.key==='M') muted=!muted;
   // ----- debug: ` toggles, 1-8 jumps to a stage, N skips to next -----
@@ -848,7 +971,7 @@ addEventListener('keydown',e=>{
     if(e.key==='Enter'||e.key===' '){ G.totalCollected=0; startStage(1,false); }
   } else if((G.state==='gameover'||G.state==='win') && (e.key===' '||e.key==='Enter')){
     G.state='select';
-  }
+  } else if(G.state==='win' && (e.key==='l'||e.key==='L')){ lbShow(lbQualified&&!lbSubmitted); }
   if([' ','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) e.preventDefault();
 });
 addEventListener('keyup',e=>keys[e.key]=false);
@@ -905,7 +1028,7 @@ function pointerDown(mx,my){
       if(Math.abs(mx-c.x)<34 && my>c.y-54 && my<c.y+24){ G.charIdx=i; return; } }
     G.totalCollected=0; startStage(1,false);
   }
-  else if(G.state==='gameover'||G.state==='win') G.state='select';
+  else if(G.state==='gameover'||G.state==='win'){ if(lbOpen) return; G.state='select'; }
   else if(G.state==='phone'){ phone.t=Math.max(phone.t,phone.dur); }
   else if(G.state==='play'){
     if(G.paused){
@@ -985,7 +1108,9 @@ function update(dt){
   if(G.state==='cutscene'){ updateCutscene(dt); return; }
   if(G.state==='transition'){ updateTransition(dt); return; }
   if(G.state==='phone'){ updatePhone(dt); return; }
-  if(G.state==='win'){ winT+=dt; return; }
+  if(G.state==='win'){ winT+=dt;
+    if(lbQualified && !lbPrompted && winT>2.6){ lbPrompted=true; lbShow(true); }
+    return; }
   if(G.state!=='play' || G.paused) return;
 
   // the last shuttle waits for no one
@@ -1190,6 +1315,9 @@ function update(dt){
       winNames=[me.charAt(0)+me.slice(1).toLowerCase()];
       const pool=RAVER_NAMES.filter(n=>n.toUpperCase()!==me).sort(()=>Math.random()-0.5);
       for(let i=0;i<winCrew;i++) winNames.push(pool[i%pool.length]);
+      // full bus = leaderboard run; the prompt opens after the bus rolls in
+      lbQualified = !!LB_URL && winCrew>=LB_QUALIFY;
+      lbPrompted=false; lbSubmitted=false;
       G.state='win';
     }
     else beginTransition();
@@ -1272,13 +1400,15 @@ const ease=t=>t<0.5?2*t*t:1-Math.pow(-2*t+2,2)/2;
 
 const crEl=document.getElementById('cr');
 const kofiEl=document.getElementById('kofi');
-let crShown=null, kofiShown=null;
+let crShown=null, kofiShown=null, lbBtnShown=null;
 function render(){
   // links only on menu screens — never a tap hazard mid-game
   const showCr = G.state==='select'||G.state==='win'||G.state==='gameover';
   if(showCr!==crShown){ crShown=showCr; if(crEl) crEl.style.display=showCr?'block':'none'; }
   const showKofi = G.state==='select'||G.state==='win';
   if(showKofi!==kofiShown){ kofiShown=showKofi; if(kofiEl) kofiEl.style.display=showKofi?'block':'none'; }
+  const showLb = !!LB_URL && (G.state==='select'||G.state==='win');
+  if(showLb!==lbBtnShown){ lbBtnShown=showLb; if(lbBtnEl) lbBtnEl.style.display=showLb?'block':'none'; if(!showLb) lbHide(); }
   cx.setTransform(PIX,0,0,PIX,0,0);
   cx.fillStyle='#07030f'; cx.fillRect(0,0,VW,VH);
   switch(G.state){
@@ -2241,6 +2371,8 @@ function renderWin(){
   txtT('THE LAST SHUTTLE!', VW/2, VH/2-96, nw?14:18, '#39ff14','center');
   txt('kick ons at your hotel!!', VW/2, VH/2-73, 11, '#2de2e6','center');
   txt(`${winCrew} RAVERS MADE IT ON THE BUS IN ${winTime.toFixed(2)}s`, VW/2, VH/2-49, nw?8:11, '#f5d300','center');
+  if(lbQualified && Math.floor(G.t*3)%3!==0)
+    txt('★ FULL BUS — LEADERBOARD RUN ★', VW/2, VH/2-32, nw?8:10, '#ff2d95','center');
   txt('THANKS FOR RAVING', VW/2, VH/2+80, 9, '#ffffff88','center');
   if(Math.floor(G.t*2)%2) txt(TOUCH?'TAP FOR ONE MORE RAVE':'PRESS SPACE FOR ONE MORE RAVE', VW/2, VH/2+100, 10, '#fff','center');
 }

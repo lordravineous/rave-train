@@ -1,0 +1,9 @@
+# Optional — only needed if deploying via the wrangler CLI instead of the dashboard.
+# Replace the KV id after running:  npx wrangler kv namespace create SCORES
+name = "rave-train-leaderboard"
+main = "worker.js"
+compatibility_date = "2026-06-01"
+
+[[kv_namespaces]]
+binding = "SCORES"
+id = "PASTE_YOUR_KV_NAMESPACE_ID_HERE"
