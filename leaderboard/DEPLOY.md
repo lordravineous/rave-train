@@ -32,5 +32,11 @@ Open `<your-worker-url>/scores` in a browser — you should see `{"board":[]}`. 
 - **Remove a score:** KV namespace → the `board` key → edit the JSON → save.
 - **Wipe the board:** delete the `board` key.
 - **Rude name slipped through:** add it to `BAD_SUB`/`BAD_EXACT` in the Worker and redeploy (and edit the `board` key to remove the entry).
-- **Anti-cheat:** scores are signed by the game and the server rejects times under 8s, over 30s, and rate-limits to 5 submissions/min/IP. The secret lives in the page source, so a determined cheater can still forge a score — if that happens, change `LSTSHTL-9000` in both `worker.js` (SECRET) and the game's `lbSig()`, redeploy, and delete the fake entry.
+- **Anti-cheat layers:**
+  1. *Run tokens* — the game requests a single-use token the moment the finale starts; the server only accepts a score whose time fits inside the real wall-clock time since the token was issued. Forged times can't be submitted instantly, every fake costs a real-time wait, and tokens are rate-limited to 12/min/IP.
+  2. *Signed payloads* — name + time + token are FNV-hashed with a secret; mismatches are rejected.
+  3. *Bounds* — sub-8s and over-30s times are impossible and rejected; submissions limited to 5/min/IP.
+  4. *One best entry per name.*
+
+  The secret lives in the page source, so a determined cheater who reads the code can still forge a score (after genuinely waiting out the time) — if that happens, delete the entry, and optionally change `LSTSHTL-9000` in both `worker.js` (SECRET) and the game's `lbSig()`.
 - **Costs:** free tier allows 100k reads + 1k writes per day to KV — roughly 1,000 full-bus finishes a day before you'd ever see an error. You will not hit this.

@@ -8,7 +8,14 @@
 //
 //  Routes:
 //    GET  /scores  -> { board:[{n,t,d}...] }  top 25, fastest first
-//    POST /submit  -> { ok, rank, board }     body: {n,t,s}
+//    POST /token   -> { token }               issued when the finale starts
+//    POST /submit  -> { ok, rank, board }     body: {n,t,s,tok}
+//
+//  Run tokens: the game requests a token the moment THE LAST SHUTTLE
+//  begins. A score is only accepted with a live, unused token, and the
+//  claimed time must fit inside the real wall-clock time since the
+//  token was issued — so a 12s run can't be forged in 1s, and every
+//  submission costs a real-time wait.
 //
 //  Only runs that finish THE LAST SHUTTLE with all 18 aboard
 //  qualify — the game only submits then, and the server rejects
@@ -21,6 +28,9 @@ const TOP_SHOW = 25;              // scores returned
 const MIN_MS   = 8000;            // gauntlet is ~1900px at 190px/s — sub-8s is impossible
 const MAX_MS   = 30000;           // shuttle leaves at 30s
 const RATE_MAX = 5;               // submissions per IP per minute
+const TOKEN_MAX= 12;              // tokens per IP per minute (restarts are normal)
+const TOKEN_TTL= 900;             // seconds a token stays valid (run + win screen + typing)
+const SLACK_MS = 2500;            // network latency allowance on the elapsed-time check
 
 // profanity filter — leetspeak is normalised first (0→O, 1→I, 3→E, ...)
 // substring matches (unambiguous):
@@ -40,9 +50,9 @@ function isClean(name){
 }
 
 // same FNV-1a signature the game computes — keeps casual cheating out
-function sig(n, t){
+function sig(n, t, tok){
   let h = 0x811c9dc5;
-  const s = n + '|' + t + '|' + SECRET;
+  const s = n + '|' + t + '|' + tok + '|' + SECRET;
   for (let i = 0; i < s.length; i++){
     h ^= s.charCodeAt(i);
     h = Math.imul(h, 0x01000193) >>> 0;
@@ -69,6 +79,18 @@ export default {
       return json({ board: board.slice(0, TOP_SHOW) });
     }
 
+    if (req.method === 'POST' && url.pathname === '/token'){
+      // issued when the finale starts; rate-limited per IP
+      const ip = req.headers.get('cf-connecting-ip') || 'unknown';
+      const tlKey = 'rlt:' + ip;
+      const tHits = parseInt(await env.SCORES.get(tlKey) || '0', 10);
+      if (tHits >= TOKEN_MAX) return json({ ok: false, error: 'slow down' }, 429);
+      await env.SCORES.put(tlKey, String(tHits + 1), { expirationTtl: 60 });
+      const token = crypto.randomUUID();
+      await env.SCORES.put('tok:' + token, String(Date.now()), { expirationTtl: TOKEN_TTL });
+      return json({ token });
+    }
+
     if (req.method === 'POST' && url.pathname === '/submit'){
       // --- rate limit: RATE_MAX submissions per IP per minute ---
       const ip = req.headers.get('cf-connecting-ip') || 'unknown';
@@ -82,12 +104,22 @@ export default {
       try { body = await req.json(); } catch { return json({ ok: false, error: 'bad request' }, 400); }
       const name = String(body.n || '').toUpperCase();
       const t = Math.round(Number(body.t));
+      const tok = String(body.tok || '');
 
       if (!/^[A-Z0-9]{2,5}$/.test(name)) return json({ ok: false, error: '2-5 letters or numbers' }, 400);
       if (!isClean(name))                return json({ ok: false, error: "that name's not rave-friendly — try another" }, 400);
       if (!Number.isFinite(t) || t < MIN_MS || t > MAX_MS)
         return json({ ok: false, error: 'impossible time' }, 400);
-      if (body.s !== sig(name, t))       return json({ ok: false, error: 'nice try' }, 400);
+      if (body.s !== sig(name, t, tok))  return json({ ok: false, error: 'nice try' }, 400);
+
+      // --- run token: must exist, be unused, and the claimed time must
+      //     fit inside the real wall-clock time since the finale started ---
+      const issued = await env.SCORES.get('tok:' + tok);
+      if (!issued) return json({ ok: false, error: 'run not verified — play a fresh run' }, 400);
+      if (t > (Date.now() - Number(issued)) + SLACK_MS)
+        return json({ ok: false, error: 'impossible time' }, 400);
+
+      await env.SCORES.delete('tok:' + tok);   // single-use — consumed on acceptance
 
       // --- insert: one entry per name, keep their best ---
       let board = (await env.SCORES.get('board', 'json')) || [];
