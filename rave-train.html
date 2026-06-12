@@ -551,7 +551,7 @@ function say(txt,col,sub){ G.msgs.push({txt,col:col||'#fff',sub,t:3.2}); if(G.ms
 // ============================================================
 let AC=null, muted=false, beatTimer=null, beatN=0, curTempo=0;
 // per-arena tempos: rainbow road · subterra · mainstage · grid · canopy · spire · kick dome · shuttle
-const BPMS=[138,140,128,132,174,145,160,190];
+const BPMS=[138,140,135,132,174,145,160,190];
 function setTempo(bpm){
   if(!AC || bpm===curTempo) return;
   curTempo=bpm;
@@ -580,14 +580,8 @@ const NOTE={C2:65.41,F2:87.31,G2:98.00,A2:110.00,F4:349.23,G4:392.00,A4:440.00,
             B4:493.88,C5:523.25,D5:587.33,E5:659.25,G5:783.99};
 const MS_CH=['Am','F','C','G'];
 const MS_ROOT={Am:'A2',F:'F2',C:'C2',G:'G2'};
-const MS_BLIP={Am:'A4',F:'F4',C:'C5',G:'G4'};
-const MS_LEAD=[
- ['A4',null,'C5',null,'E5',null,'G5',null,'E5',null,null,null,'C5',null,'D5',null],
- ['A4',null,'C5',null,'E5',null,'G5',null,'E5',null,null,null,'C5',null,'D5',null],
- ['A4',null,'C5',null,'E5',null,'G5',null,'E5',null,null,null,'C5',null,'D5',null],
- ['B4',null,'C5',null,'D5',null,'E5',null,'G5',null,'E5',null,'D5',null,'C5',null]];
-const MS_ARP={Am:['A4','C5','E5','C5'], F:['F4','A4','C5','A4'],
-              C:['C5','E5','G5','E5'],  G:['G4','B4','D5','B4']};
+const MS_TRIAD={Am:['A4','C5','E5'], F:['F4','A4','C5'],
+                C:['C5','E5','G5'],  G:['G4','B4','D5']};
 function beat(){
   if(!AC||muted) return;
   const t=AC.currentTime;
@@ -630,17 +624,15 @@ function beat(){
     if(s%2===0) acid(t, 55*Math.pow(2,key/12), 0.18);   // the wobble
     if(s%4===2) hat(t,0.05,false);
     if(s%16===14) hat(t,0.1,true);
-  } else if(stg===3){                          // MAINSTAGE — A minor big room, 128
+  } else if(stg===3){                          // MAINSTAGE — stripped big room, 128
     const tb=(S>>4)%16, sb=S%16, ch=MS_CH[tb%4];
-    if(sb%4===0) kickDist(t);                  // x---x---x---x---
-    if(sb===4||sb===12) clap(t);               // ----x-------x---
-    if(sb%4===2) hat(t,0.04,false);            // --x---x---x---x-
-    if(sb===6||sb===14) hat(t,0.13,true);      // ------x-------x-
-    if(sb===7||sb===15) blip(t, NOTE[MS_BLIP[ch]]*2);  // -------x-------x
-    if(sb%4===2) houseBass(t, NOTE[MS_ROOT[ch]]);      // offbeat festival bass
-    const ln=MS_LEAD[tb%4][sb];
-    if(ln) lead(t, NOTE[ln]);                  // soft big-room lead
-    if(tb>=8){ const ap=MS_ARP[ch][sb%4]; twinkle(t, NOTE[ap], 0.025); } // arp from bar 9
+    if(sb%4===0) kick(t,true);                 // big CLEAN kick, four to the floor
+    if(sb===4||sb===12) clap(t);
+    if(sb%4===2){ hat(t,0.12,true); houseBass(t, NOTE[MS_ROOT[ch]]); } // bass locked to the offbeat
+    if(sb%2===1) hat(t,0.035,false);
+    // staccato chord stabs, syncopated off the kick — denser in the back half
+    if(tb<8){ if(sb===3||sb===10) msStab(t,ch); }
+    else    { if(sb===3||sb===6||sb===10||sb===14) msStab(t,ch); }
   } else if(stg===4){                          // THE GRID — acid techno, 132
     if(s%8===0) kick(t);
     if(s%8===4) clap(t);
@@ -692,20 +684,16 @@ function pluck(t,f){ const o=AC.createOscillator(),g=AC.createGain(),lp=AC.creat
   o.type='triangle'; o.frequency.value=f*2; lp.type='lowpass'; lp.frequency.value=1800;
   g.gain.setValueAtTime(0.08,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.22);
   o.connect(lp).connect(g).connect(AC.destination); o.start(t); o.stop(t+0.24);}
-// softBigRoomLead — two gently detuned saws through a lowpass
-function lead(t,f){
-  [-8,8].forEach(d=>{
+// short staccato chord stab for Mainstage
+function msStab(t,ch){
+  for(const n of MS_TRIAD[ch]){
     const o=AC.createOscillator(),g=AC.createGain(),lp=AC.createBiquadFilter();
-    o.type='sawtooth'; o.frequency.value=f; o.detune.value=d;
-    lp.type='lowpass'; lp.frequency.value=1500;
-    g.gain.setValueAtTime(0.05,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.28);
-    o.connect(lp).connect(g).connect(AC.destination); o.start(t); o.stop(t+0.3);
-  });}
-// quiet arcade blip
-function blip(t,f){ const o=AC.createOscillator(),g=AC.createGain();
-  o.type='square'; o.frequency.value=f;
-  g.gain.setValueAtTime(0.045,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.07);
-  o.connect(g).connect(AC.destination); o.start(t); o.stop(t+0.08);}
+    o.type='sawtooth'; o.frequency.value=NOTE[n]; o.detune.value=rnd(-7,7);
+    lp.type='lowpass'; lp.frequency.value=2200;
+    g.gain.setValueAtTime(0.05,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.09);
+    o.connect(lp).connect(g).connect(AC.destination); o.start(t); o.stop(t+0.1);
+  }
+}
 function pad(t,f){
   [1,1.189,1.498,2].forEach(r=>{
     const o=AC.createOscillator(),g=AC.createGain(),lp=AC.createBiquadFilter();
