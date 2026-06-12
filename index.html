@@ -237,7 +237,7 @@ function shade(hex,amt){ // darken toward fog purple
 const TOTEMS = [
  {id:'sober', name:'SOBER FRIEND',  col:'#39ff14', dur:25, msg:'Look I see them!'},
  {id:'glow',  name:'SHOULDER RIDE', col:'#f5d300', dur:20, msg:'You can see everything!'},
- {id:'bass',  name:'FESTIVAL BO',   col:'#a3e635', dur:15, msg:'You smell! The crowd backs off!'},
+ {id:'bass',  name:'FESTIVAL B.O.', col:'#a3e635', dur:15, msg:'You smell! The crowd backs off!'},
  {id:'torch', name:'PHONE TORCH',   col:'#ff6d00', dur:18, msg:'Your pupils are huge lmao'},
  {id:'signal',name:'WIFI CONNECTED',col:'#b14aed', dur:25, msg:'Maps is working again!'},
  {id:'mum',   name:'RAVE MOM',      col:'#ff8fab', dur:8,  msg:'You are safe. Everything is going to be okay'},
@@ -358,7 +358,8 @@ function genWorld(stage, spawnFrac){
     const CR=[[350,70,45],[350,210,45],[650,135,50],[950,60,40],[950,200,40],
               [1250,135,55],[1500,80,38],[1560,210,38],
               [1810,40,26],[1810,135,40],[1810,240,26],          // the triple gate
-              [2100,90,45],[2100,220,35],[2400,135,60],
+              [2120,38,32],[2120,232,32],                        // THE FUNNEL's flanks
+              [2400,135,60],
               [2700,60,40],[2700,200,40],[3000,135,40]];
     for(const [x,y,r] of CR){
       const c={x,y,r,members:[]};
@@ -373,8 +374,12 @@ function genWorld(stage, spawnFrac){
     }
     const OB=[['speaker',500,135],['bin',430,135],['tent',620,40],['bar',800,38],['loo',800,232],
               ['tent',1100,60],['speaker',1250,40],['merch',1400,135],['bin',1650,40],['loo',1700,230],
-              ['speaker',1950,225],['bin',2000,70],['bar',2250,135],['merch',2480,40],
-              ['loo',2550,38],['merch',2850,225],['bar',2950,230],['bin',3150,135]];
+              ['speaker',1950,225],['bin',2000,70],
+              ['loo',2090,95],['loo',2148,95],['loo',2090,175],['loo',2148,175], // THE FUNNEL
+              ['bar',2280,135],                                  // ...straight into a bar. devious.
+              ['merch',2480,40],
+              ['loo',2550,38],['merch',2850,225],['bar',2950,230],['speaker',3060,60],
+              ['bin',3150,135]];
     for(const [t,x,y] of OB){ const d=OB_DIMS[t]; w.obstacles.push({x,y,w:d.w,h:d.h,type:t,ph:x%6}); }
     // NO powerups in the finale — a pure, even gauntlet (leaderboard-ready)
     w.baggies=[];
@@ -502,8 +507,9 @@ function startStage(stage, withCutscene, spawnFrac){
   effects={}; exitGate=null; exitArrowT=0; G.zoom=1; friendDryT=0; G.shield=false;
   beatN=0; if(AC) setTempo(BPMS[Math.min(stage,FINAL_STAGE)-1]);
   if(world.final){
-    // your whole crew comes with you — get them all on the bus
-    const crew=Math.min(12, friendsNeeded(stage-1));
+    // your whole crew from stage 7 comes with you — all 18 of them
+    const crew=friendsNeeded(stage-1);
+    world.crewMax=crew;
     for(let i=0;i<crew;i++) party.push({pal:choice(CHARS)});
     world.timer=30;
     exitGate={x:world.W-90, y:world.H/2};
@@ -1091,7 +1097,7 @@ function update(dt){
       party.push({pal:f.pal});
       G.totalCollected++; friendDryT=0;
       sfx('pick');
-      say(`FOUND A FRIEND! ${party.length}/${friendsNeeded(G.stage)}`,'#39ff14');
+      say(`FOUND A FRIEND! ${party.length}/${world.final?world.crewMax:friendsNeeded(G.stage)}`,'#39ff14');
       if(party.length>=friendsNeeded(G.stage) && !exitGate){
         spawnExit(); }
     }
@@ -1883,7 +1889,7 @@ function renderHUD(){
   txt(narrow?`STAGE ${G.stage}`:`STAGE ${G.stage} · ${STAGE_NAMES[(G.stage-1)%STAGE_NAMES.length]}`,5,4,10,'#2de2e6');
   if(G.debug) txt('DEBUG', 5, VH-26, 8, '#ff6d00');
   if(world.final){
-    txt(`CREW ${party.length}`, VW-5,4,10, party.length?'#39ff14':'#ff4f4f','right');
+    txt(`CREW ${party.length}/${world.crewMax||18}`, VW-5,4,10, party.length?'#39ff14':'#ff4f4f','right');
     const tl=Math.max(0,world.timer||0);
     txt(narrow?`BUS ${Math.ceil(tl)}s`:`BUS LEAVES: ${Math.ceil(tl)}s`, VW/2, 20, 10,
       tl<11 ? (Math.floor(G.t*4)%2?'#ff4f4f':'#fff') : '#f5d300', 'center');
@@ -2109,8 +2115,9 @@ function renderPhone(){
   cx.strokeStyle='#3a2f55'; cx.lineWidth=1; cx.strokeRect(px-3.5,py-3.5,pw+7,ph2+7);
   cx.fillStyle='#0b0f1a'; cx.fillRect(px,py,pw,ph2);
   cx.fillStyle='#444'; cx.fillRect(px+pw/2-8,py-2,16,1);   // speaker slot
-  // status bar
-  txt('23:58', px+5, py+3, 7, '#8899aa');
+  // status bar — the night marches on: 21:52 at the gates, +1 hour per stage
+  const hr=(21+(G.stage-1))%24;
+  txt(String(hr).padStart(2,'0')+':52', px+5, py+3, 7, '#8899aa');
   cx.fillStyle='#39ff14'; cx.fillRect(px+pw-16,py+4,10,4);
   cx.fillStyle='#0b0f1a'; cx.fillRect(px+pw-9,py+5,2,2);
   // chat header
