@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Rave Train — Mainstage Demo</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  body{margin:0;background:#0a0014;color:#eee;font-family:'Courier New',monospace;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+  h1{color:#2de2e6;text-shadow:0 0 18px #2de2e6;letter-spacing:4px;margin:28px 0 2px;font-size:26px}
+  h2{color:#f6019d;margin:0 0 16px;font-size:13px;letter-spacing:3px;font-weight:normal}
+  #stage{font-size:13px;letter-spacing:2px;color:#ffd319;height:18px;margin-bottom:10px}
+  canvas{background:#06000d;border:1px solid #2de2e644;border-radius:8px;margin-bottom:18px;max-width:94vw}
+  .row{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-bottom:12px}
+  button{background:#16002a;color:#2de2e6;border:1px solid #2de2e6;border-radius:6px;padding:12px 20px;font-family:inherit;font-size:14px;cursor:pointer;letter-spacing:1px}
+  button:hover{background:#2de2e6;color:#0a0014}
+  button.hot{border-color:#f6019d;color:#f6019d}
+  button.hot:hover{background:#f6019d;color:#0a0014}
+  button.on{background:#ffd319;border-color:#ffd319;color:#0a0014}
+  #play{font-size:18px;padding:16px 44px}
+  p.note{max-width:580px;color:#888;font-size:12px;line-height:1.7;text-align:center;padding:0 16px}
+  b{color:#bbb}
+</style>
+</head>
+<body>
+<h1>RAVE TRAIN</h1>
+<h2>MAINSTAGE — 128 BPM FESTIVAL DEMO</h2>
+<div id="stage"></div>
+<canvas id="viz" width="640" height="140"></canvas>
+<div class="row"><button id="play">&#9654; PLAY</button></div>
+<div class="row">
+  <button id="totem" class="hot">&#128511; TOTEM APPEARS</button>
+  <button id="exit" class="hot">&#128682; EXIT FOUND</button>
+  <button id="win" class="hot">&#127942; VICTORY DANCE</button>
+</div>
+<p class="note">
+  Loop: <b>8-bar groove</b> (filter half-closed, breakdown feel) &rarr; <b>4-bar build</b>
+  (tightening snare roll, noise riser, filter opens, beat of silence) &rarr; <b>12-bar drop</b>
+  (full kit, sidechained saw bass, wide supersaw stabs, call-and-response pentatonic lead,
+  crowd swell) &rarr; loops. Totem and exit arp layer over the music; victory is a one-shot 4-bar loop.
+</p>
+<script>
+"use strict";
+let AC=null, master, comp, duck, filt, revSend, dlySend, analyser;
+let playing=false, timer=null, stepN=0, nextT=0, startT=0, exitArp=false;
+const BPM=128, S16=60/BPM/4, BAR=S16*16;
+const LOOP=384, GROOVE_END=128, BUILD_END=192;          // 24-bar phrase
+const rnd=(a,b)=>a+Math.random()*(b-a);
+const F=(base,s)=>base*Math.pow(2,s/12);
+// Am - F - C - G, voiced from A3 (220 Hz)
+const CHORDS=[[0,3,7,12],[-4,0,3,8],[3,7,10,15],[-2,2,5,10]];
+const ROOTS=[0,-4,3,-2];
+// 4-bar call-and-response hook, A minor pentatonic, offsets from A4
+const LEAD={0:{n:12,d:.5},6:{n:10,d:.22},12:{n:7,d:.3},
+            24:{n:3,d:.11},26:{n:5,d:.11},28:{n:7,d:.11},30:{n:10,d:.11},
+            32:{n:12,d:.5},38:{n:15,d:.22},44:{n:10,d:.3},
+            56:{n:12,d:.11},58:{n:10,d:.11},60:{n:7,d:.11},62:{n:5,d:.11}};
+const EXITARP=[12,15,17,19,22,24,27,31];                 // rising octave arp
+
+function initAudio(){
+  if(AC) return;
+  AC=new (window.AudioContext||window.webkitAudioContext)();
+  master=AC.createGain(); master.gain.value=0.85;
+  comp=AC.createDynamicsCompressor();
+  comp.threshold.value=-14; comp.ratio.value=5; comp.attack.value=0.004; comp.release.value=0.18;
+  analyser=AC.createAnalyser(); analyser.fftSize=512;
+  master.connect(comp).connect(analyser).connect(AC.destination);
+  // ---- sidechain bus: synths -> duck (pumps on kick) -> lowpass (build automation) -> master
+  duck=AC.createGain(); filt=AC.createBiquadFilter();
+  filt.type='lowpass'; filt.frequency.value=16000; filt.Q.value=0.8;
+  duck.connect(filt).connect(master);
+  // ---- fake big-room space: noise-impulse convolver + dotted-8th feedback delay
+  const rev=AC.createConvolver(); rev.buffer=impulse(2.4,2.6);
+  const rg=AC.createGain(); rg.gain.value=0.32;
+  revSend=AC.createGain(); revSend.connect(rev).connect(rg).connect(master);
+  const dly=AC.createDelay(1); dly.delayTime.value=S16*3;
+  const fb=AC.createGain(); fb.gain.value=0.38;
+  const dg=AC.createGain(); dg.gain.value=0.28;
+  dlySend=AC.createGain(); dlySend.connect(dly); dly.connect(fb).connect(dly);
+  dly.connect(dg).connect(master);
+}
+function impulse(dur,decay){ const len=AC.sampleRate*dur|0, b=AC.createBuffer(2,len,AC.sampleRate);
+  for(let c=0;c<2;c++){const d=b.getChannelData(c);
+    for(let i=0;i<len;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/len,decay);} return b;}
+function noiseSrc(dur){ const len=Math.max(1,AC.sampleRate*dur|0);
+  const b=AC.createBuffer(1,len,AC.sampleRate),d=b.getChannelData(0);
+  for(let i=0;i<len;i++)d[i]=Math.random()*2-1;
+  const s=AC.createBufferSource(); s.buffer=b; return s;}
+
+// ================= VOICES =================
+function kick(t){
+  const o=AC.createOscillator(),g=AC.createGain();
+  o.frequency.setValueAtTime(150,t); o.frequency.exponentialRampToValueAtTime(40,t+0.12);
+  g.gain.setValueAtTime(0.9,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.22);
+  o.connect(g).connect(master); o.start(t); o.stop(t+0.24);
+  const n=noiseSrc(0.02),hp=AC.createBiquadFilter(),hg=AC.createGain();   // click
+  hp.type='highpass'; hp.frequency.value=1500;
+  hg.gain.setValueAtTime(0.3,t); hg.gain.exponentialRampToValueAtTime(0.001,t+0.02);
+  n.connect(hp).connect(hg).connect(master); n.start(t);
+  // sidechain pump — everything on the duck bus dips with each kick
+  duck.gain.setValueAtTime(1,t);
+  duck.gain.linearRampToValueAtTime(0.12,t+0.02);
+  duck.gain.linearRampToValueAtTime(1,t+0.34);
+}
+function bass(t,root){                                   // sidechained saw bass
+  const f=F(55,root);
+  const o=AC.createOscillator(),s=AC.createOscillator(),g=AC.createGain(),lp=AC.createBiquadFilter();
+  o.type='sawtooth'; o.frequency.value=f*2; s.type='sine'; s.frequency.value=f;
+  lp.type='lowpass'; lp.frequency.value=620;
+  g.gain.setValueAtTime(0.30,t); g.gain.setValueAtTime(0.30,t+0.40);
+  g.gain.exponentialRampToValueAtTime(0.001,t+0.46);
+  o.connect(lp); s.connect(lp); lp.connect(g).connect(duck);
+  o.start(t); s.start(t); o.stop(t+0.48); s.stop(t+0.48);
+}
+function supersaw(t,semis,dur,vol){                      // wide detuned-stack chords
+  const g=AC.createGain();
+  g.gain.setValueAtTime(0.0001,t); g.gain.linearRampToValueAtTime(vol,t+0.02);
+  g.gain.setValueAtTime(vol,t+Math.max(0.03,dur-0.08));
+  g.gain.linearRampToValueAtTime(0.0001,t+dur);
+  g.connect(duck); g.connect(revSend);
+  semis.forEach(n=>{ [-1,0,1].forEach(i=>{
+    const o=AC.createOscillator(),p=AC.createStereoPanner();
+    o.type='sawtooth'; o.frequency.value=F(220,n); o.detune.value=i*16+rnd(-4,4);
+    p.pan.value=i*0.7;
+    o.connect(p).connect(g); o.start(t); o.stop(t+dur+0.05); });});
+}
+function lead(t,semi,dur,vol){                           // detuned-saw festival lead
+  const g=AC.createGain(),lp=AC.createBiquadFilter();
+  lp.type='lowpass'; lp.frequency.value=6500;
+  g.gain.setValueAtTime(0.0001,t); g.gain.linearRampToValueAtTime(vol,t+0.01);
+  g.gain.setValueAtTime(vol,t+dur); g.gain.linearRampToValueAtTime(0.0001,t+dur+0.06);
+  g.connect(lp); lp.connect(duck); lp.connect(dlySend); lp.connect(revSend);
+  [-18,0,18].forEach(d=>{
+    const o=AC.createOscillator(),p=AC.createStereoPanner();
+    o.type='sawtooth'; o.frequency.value=F(440,semi); o.detune.value=d; p.pan.value=d/26;
+    o.connect(p).connect(g); o.start(t); o.stop(t+dur+0.1); });
+  const o2=AC.createOscillator(),g2=AC.createGain();     // octave-down body
+  o2.type='square'; o2.frequency.value=F(220,semi); g2.gain.value=0.3;
+  o2.connect(g2).connect(g); o2.start(t); o2.stop(t+dur+0.1);
+}
+function hat(t,v,open){ const n=noiseSrc(open?0.09:0.03),hp=AC.createBiquadFilter(),g=AC.createGain();
+  hp.type='highpass'; hp.frequency.value=7500;
+  g.gain.setValueAtTime(v,t); g.gain.exponentialRampToValueAtTime(0.001,t+(open?0.09:0.03));
+  n.connect(hp).connect(g).connect(master); n.start(t);}
+function clap(t){ const len=2600,b=AC.createBuffer(1,len,AC.sampleRate),d=b.getChannelData(0);
+  for(let i=0;i<len;i++){const e=(i%900<60)?1:Math.pow(1-i/len,2.2); d[i]=(Math.random()*2-1)*e;}
+  const s=AC.createBufferSource(),bp=AC.createBiquadFilter(),g=AC.createGain();
+  bp.type='bandpass'; bp.frequency.value=1600; bp.Q.value=1.2; g.gain.value=0.26;
+  s.buffer=b; s.connect(bp).connect(g).connect(master); g.connect(revSend); s.start(t);}
+function snare(t,v){ const n=noiseSrc(0.12),bp=AC.createBiquadFilter(),g=AC.createGain();
+  bp.type='bandpass'; bp.frequency.value=1900; bp.Q.value=0.9;
+  g.gain.setValueAtTime(v,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.12);
+  n.connect(bp).connect(g).connect(master); g.connect(revSend); n.start(t);
+  const o=AC.createOscillator(),g2=AC.createGain();
+  o.frequency.value=190; g2.gain.setValueAtTime(v*0.8,t);
+  g2.gain.exponentialRampToValueAtTime(0.001,t+0.08);
+  o.connect(g2).connect(master); o.start(t); o.stop(t+0.09);}
+function crash(t){ const n=noiseSrc(0.9),hp=AC.createBiquadFilter(),g=AC.createGain();
+  hp.type='highpass'; hp.frequency.value=4200;
+  g.gain.setValueAtTime(0.3,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.9);
+  n.connect(hp).connect(g).connect(master); g.connect(revSend); n.start(t);}
+function riser(t,dur){                                   // noise sweep + pitch riser
+  const n=noiseSrc(dur+0.1),bp=AC.createBiquadFilter(),g=AC.createGain();
+  bp.type='bandpass'; bp.Q.value=1.1;
+  bp.frequency.setValueAtTime(250,t); bp.frequency.exponentialRampToValueAtTime(9000,t+dur);
+  g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(0.3,t+dur);
+  g.gain.linearRampToValueAtTime(0.0001,t+dur+0.05);
+  n.connect(bp).connect(g).connect(master); n.start(t);
+  const o=AC.createOscillator(),og=AC.createGain();
+  o.type='sawtooth';
+  o.frequency.setValueAtTime(110,t); o.frequency.exponentialRampToValueAtTime(1760,t+dur);
+  og.gain.setValueAtTime(0.0001,t); og.gain.exponentialRampToValueAtTime(0.05,t+dur);
+  og.gain.linearRampToValueAtTime(0.0001,t+dur+0.05);
+  o.connect(og).connect(master); og.connect(revSend); o.start(t); o.stop(t+dur+0.1);}
+function cheer(t,dur){                                   // noise-based crowd approximation
+  const len=AC.sampleRate*dur|0, b=AC.createBuffer(2,len,AC.sampleRate);
+  for(let c=0;c<2;c++){ const d=b.getChannelData(c); let lfo=1;
+    for(let i=0;i<len;i++){ const x=i/len;
+      const env=x<0.35?Math.pow(x/0.35,2):Math.pow(1-(x-0.35)/0.65,1.4);
+      if(i%480===0) lfo=0.55+Math.random()*0.45;
+      d[i]=(Math.random()*2-1)*env*lfo; }}
+  const s=AC.createBufferSource(),bp=AC.createBiquadFilter(),g=AC.createGain();
+  s.buffer=b; bp.type='bandpass'; bp.frequency.value=1150; bp.Q.value=0.5; g.gain.value=0.45;
+  s.connect(bp).connect(g).connect(master); g.connect(revSend); s.start(t);}
+// ---- gameplay one-shots ----
+function totemPing(){ initAudio(); if(AC.state==='suspended')AC.resume();
+  const t=AC.currentTime+0.001;
+  const o=AC.createOscillator(),bp=AC.createBiquadFilter(),g=AC.createGain();
+  o.type='triangle'; o.frequency.value=1568;
+  bp.type='bandpass'; bp.frequency.value=1568; bp.Q.value=18;   // high resonant ping
+  g.gain.setValueAtTime(0.5,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.7);
+  o.connect(bp).connect(g); g.connect(master); g.connect(dlySend); g.connect(revSend);
+  o.start(t); o.stop(t+0.75);}
+function exitNote(t,semi){
+  const o=AC.createOscillator(),g=AC.createGain(),lp=AC.createBiquadFilter();
+  o.type='square'; o.frequency.value=F(440,semi);
+  lp.type='lowpass'; lp.frequency.value=4500;
+  g.gain.setValueAtTime(0.06,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.18);
+  o.connect(lp).connect(g); g.connect(duck); g.connect(dlySend);
+  o.start(t); o.stop(t+0.2);}
+function victory(){ initAudio(); if(AC.state==='suspended')AC.resume();
+  if(playing) stop();
+  const t0=AC.currentTime+0.08;
+  cheer(t0,3.5); crash(t0);
+  for(let i=0;i<64;i++){ const t=t0+i*S16, ss=i&15, ch=(i>>4)%4;
+    if(ss%4===0){ kick(t); bass(t,ROOTS[ch]); lead(t,[12,15,19,24][ss>>2],0.16,0.10); }
+    if(ss%4===2) hat(t,0.12,true);
+    if(ss%2===1) hat(t,0.05,false);
+    if(ss%8===4) clap(t);
+    if(ss===2||ss===6||ss===10||ss===14) supersaw(t,CHORDS[ch],0.2,0.11); }
+  crash(t0+64*S16);
+  stageEl.textContent='VICTORY DANCE!';}
+
+// ================= SEQUENCER =================
+function schedule(i,t){
+  const s=i%LOOP, bar=s>>4, ss=s&15, ch=bar%4;
+  if(s===0){ filt.frequency.cancelScheduledValues(t); filt.frequency.setValueAtTime(700,t); }
+  if(s===GROOVE_END){                                   // open the filter through the build
+    filt.frequency.setValueAtTime(700,t);
+    filt.frequency.exponentialRampToValueAtTime(15000,t+(BUILD_END-GROOVE_END)*S16); }
+  if(s<GROOVE_END){                                     // GROOVE / breakdown — filter dark
+    if(ss%4===0){ kick(t); bass(t,ROOTS[ch]); }
+    if(ss%4===2) hat(t,0.10,true);
+    if(ss%2===1) hat(t,0.035,false);
+    if(ss%8===4) clap(t);
+    if(ss===0) supersaw(t,CHORDS[ch],BAR*0.95,0.045);
+    if(ss===2||ss===6||ss===10||ss===14) supersaw(t,CHORDS[ch],0.18,0.06);
+  }else if(s<BUILD_END){                                // BUILD — snare roll tightens
+    const bp=s-GROOVE_END;
+    if(bp===0) riser(t,64*S16);
+    if(bp===32) cheer(t,3.2);                           // crowd swells into the drop
+    if(bp<62){                                          // last 2 steps: silence before drop
+      if(ss%4===0){ kick(t); bass(t,0); }
+      const div=bp<24?4:bp<48?2:1;
+      if(bp%div===0) snare(t,0.10+bp*0.0035);
+      if(ss%2===1) hat(t,0.04,false);
+      if(ss===2||ss===6||ss===10||ss===14) supersaw(t,CHORDS[ch],0.16,0.07); }
+  }else{                                                // THE DROP — everything open
+    const dp=s-BUILD_END;
+    if(dp===0) crash(t);
+    if(ss%4===0){ kick(t); bass(t,ROOTS[ch]); }
+    if(ss%4===2) hat(t,0.13,true);
+    if(ss%2===1) hat(t,0.05,false);
+    if(ss%8===4){ clap(t); snare(t,0.14); }
+    if(ss===2||ss===6||ss===10||ss===14) supersaw(t,CHORDS[ch],0.20,0.10);
+    if(ss===0) supersaw(t,CHORDS[ch],BAR*0.95,0.05);
+    const L=LEAD[dp%64]; if(L) lead(t,L.n,L.d,0.11);
+    if(dp>=176&&ss%2===0) snare(t,0.10+ss*0.006);       // fill into the loop
+  }
+  if(exitArp&&ss%2===0) exitNote(t,EXITARP[(s>>1)%8]);  // exit-found rising octave arp
+}
+function tick(){ while(nextT<AC.currentTime+0.15){ schedule(stepN,nextT); stepN++; nextT+=S16; } }
+function start(){ initAudio(); if(AC.state==='suspended')AC.resume();
+  playing=true; stepN=0; nextT=AC.currentTime+0.1; startT=nextT;
+  timer=setInterval(tick,25); draw();
+  btnPlay.innerHTML='&#9632; STOP';}
+function stop(){ playing=false; clearInterval(timer);
+  btnPlay.innerHTML='&#9654; PLAY'; stageEl.textContent='';}
+
+// ================= UI =================
+const btnPlay=document.getElementById('play'), stageEl=document.getElementById('stage');
+const cv=document.getElementById('viz'), ctx=cv.getContext('2d');
+btnPlay.onclick=()=>playing?stop():start();
+document.getElementById('totem').onclick=totemPing;
+document.getElementById('exit').onclick=e=>{ exitArp=!exitArp; e.target.classList.toggle('on',exitArp); };
+document.getElementById('win').onclick=victory;
+function draw(){
+  if(!playing){ ctx.clearRect(0,0,cv.width,cv.height); return; }
+  requestAnimationFrame(draw);
+  const a=new Uint8Array(analyser.frequencyBinCount); analyser.getByteFrequencyData(a);
+  ctx.clearRect(0,0,cv.width,cv.height);
+  const n=64,w=cv.width/n;
+  for(let i=0;i<n;i++){ const v=a[i*2]/255, h=v*cv.height;
+    ctx.fillStyle=`hsl(${190+v*130},95%,${45+v*20}%)`;
+    ctx.fillRect(i*w+1,cv.height-h,w-2,h); }
+  const cur=Math.floor((AC.currentTime-startT)/S16);
+  if(cur>=0){ const s=cur%LOOP, bar=(s>>4)+1;
+    stageEl.textContent=s<GROOVE_END?`GROOVE — bar ${bar}/24`
+      :s<BUILD_END?`BUILD — bar ${bar}/24 ⚡`:`DROP — bar ${bar}/24 🔥`; }
+}
+document.addEventListener('visibilitychange',()=>{
+  if(!document.hidden&&AC&&AC.state==='suspended')AC.resume();});
+</script>
+</body>
+</html>

@@ -15,6 +15,10 @@
     font:10px "Courier New",monospace;color:#ffffff44;text-decoration:none;
     letter-spacing:1px;z-index:10;}
   #cr:hover{color:#ffffff99;}
+  @media (max-width:600px){
+    #cr{font-size:13px;bottom:10px;color:#ffffff77;
+      background:#07030fd0;padding:3px 10px;border-radius:4px;}
+  }
   canvas{image-rendering:pixelated;image-rendering:crisp-edges;background:#07030f;touch-action:none;}
 </style>
 </head>
@@ -76,7 +80,7 @@ const choice=a=>a[Math.floor(Math.random()*a.length)];
 // ---------- characters (pixel ravers) ----------
 const CHARS = [
  {name:'KEVIN NGUYEN', skin:'#e3b486', hair:'#241812', top:'#16161e', legs:'#23232f', glow:'#39ff14', style:'part'},
- {name:'TIFFANY TRAN', skin:'#e3b486', hair:'#f7d774', top:'#eef2f8', legs:'#2456c9', glow:'#00e5ff', style:'long'},
+ {name:'TIFFANY TAN', skin:'#e3b486', hair:'#f7d774', top:'#eef2f8', legs:'#2456c9', glow:'#00e5ff', style:'long'},
  {name:'TECHNO TESS',skin:'#ffe0c2', hair:'#00ff9f', top:'#0d0d12', legs:'#3a1b4f', glow:'#ff2d95', style:'bob'},
  {name:'GLOW JOE',   skin:'#8d5524', hair:'#2b1a0e', top:'#f5d300', legs:'#143c2b', glow:'#ff6d00', style:'afro'},
  {name:'KANDI KAI',  skin:'#f1c27d', hair:'#b14aed', top:'#ff4f9a', legs:'#11324d', glow:'#f5d300', style:'spiky'},
@@ -852,7 +856,7 @@ function pointerDown(mx,my){
   else if(G.state==='gameover'||G.state==='win') G.state='select';
   else if(G.state==='phone'){ phone.t=Math.max(phone.t,phone.dur); }
   else if(G.state==='play'){
-    if(my<20 && mx>VW-50){ G.paused=!G.paused; return; }   // tap top-right = pause
+    if(TOUCH && my<18 && Math.abs(mx-VW/2)<26){ G.paused=!G.paused; return; }  // pause button
     if(G.paused){ G.paused=false; return; }                 // tap anywhere resumes
   }
 }
@@ -1007,7 +1011,7 @@ function update(dt){
     if(ac.y<yMin||ac.y>world.H-70) ac.dir=-ac.dir;
     ac.x=clamp(ac.x,90,world.W-90); ac.y=clamp(ac.y,yMin,world.H-70);
     const flame=(ac.t%5)<1;
-    if(player.invuln<=0 && Math.hypot(ac.x-player.x,(ac.y-10)-player.y)<(flame?36:26)){
+    if(player.invuln<=0 && !effects.bagstrong && Math.hypot(ac.x-player.x,(ac.y-10)-player.y)<(flame?36:26)){
       const a=angTo(ac,player);
       player.x=ac.x+Math.cos(a)*46; player.y=ac.y+Math.sin(a)*46;
       hitPenalty(flame?'got singed by the art car':'bumped the art car');
@@ -1015,9 +1019,10 @@ function update(dt){
     }
   }
 
-  // ----- solid obstacles -----
+  // ----- solid obstacles (I FEEL STRONG walks straight through, except the stage) -----
   if(player.invuln<=0){
     for(const o of world.obstacles){
+      if(effects.bagstrong && o.type!=='stage') continue;
       const nx=clamp(player.x,o.x-o.w/2,o.x+o.w/2), ny=clamp(player.y,o.y-o.h/2,o.y+o.h/2);
       if(Math.hypot(nx-player.x,ny-player.y)<5){
         // shove out of the rect before penalising
@@ -1143,7 +1148,7 @@ function spawnExit(){
   } while(k++<30 && hitsObstacle(world,p,28));   // never behind the stage
   exitGate=p;
   exitArrowT=3.5;
-  say('THE EXIT APPEARED! FOLLOW THE ARROW!','#f5d300');
+  say("EVERYONE'S HERE! HEAD FOR THE EXIT!",'#f5d300');
   sfx('exit');
 }
 
@@ -1435,13 +1440,13 @@ function renderPlay(){
     }
     cx.restore();
 
-    // arrows: exit arrow stays up until the exit is INSIDE your vision
+    // arrows: ride the vision boundary until the target is INSIDE your vision
     const visR=VISION*(lit?1.8:1)*0.95;
-    if(exitGate) edgeArrow(exitGate,'#f5d300',sx,sy,Z,visR);
+    if(exitGate) edgeArrow(exitGate,'#f5d300',px,py,R,visR);
     if((effects.sober || friendDryT>15) && !exitGate && world.friends.length){
       let best=null,bd=1e9;
       for(const f of world.friends){ const d=Math.hypot(f.x-player.x,f.y-player.y); if(d<bd){bd=d;best=f;} }
-      if(best) edgeArrow(best,'#39ff14',sx,sy,Z,visR);
+      if(best) edgeArrow(best,'#39ff14',px,py,R,visR);
     }
   }
 }
@@ -1750,22 +1755,19 @@ function drawExit(x,y){
   cx.font='bold 6px monospace'; cx.textAlign='center'; cx.fillText('EXIT',x,y-21);
   cx.fillStyle='#f5d30033'; cx.fillRect(x-9,y-21,18,21);
 }
-// BIG pulsing chevron arrow. With hideDist: shown until target is within
-// hideDist of the player (i.e. inside the vision bubble), even if on screen.
-function edgeArrow(target,col,sx,sy,Z=1,hideDist=0){
+// pulsing chevron arrow, riding the vision-circle boundary so it's never
+// hidden under the touch buttons. Hidden once the target is inside vision.
+function edgeArrow(target,col,px,py,R,hideDist=0){
   if(hideDist>0 && Math.hypot(target.x-player.x,target.y-player.y)<hideDist) return;
-  let tx=(target.x-sx)*Z, ty=(target.y-sy)*Z;
-  if(!hideDist && tx>8&&tx<VW-8&&ty>8&&ty<VH-8) return;   // on screen already
-  const a=Math.atan2(ty-VH/2,tx-VW/2);
-  const m=22;
-  let ex=clamp(tx,m,VW-m), ey=clamp(ty,m,VH-m);
+  const a=angTo(player,target);
+  const ex=px+Math.cos(a)*(R-14), ey=py+Math.sin(a)*(R-14);
   cx.save(); cx.translate(ex,ey); cx.rotate(a);
   const pulse=1+0.14*Math.sin(G.t*6);
   cx.scale(pulse,pulse);
   cx.fillStyle='#000000cc';   // outline backing
-  cx.beginPath(); cx.moveTo(19,0); cx.lineTo(-10,-11); cx.lineTo(-4,0); cx.lineTo(-10,11); cx.closePath(); cx.fill();
+  cx.beginPath(); cx.moveTo(14,0); cx.lineTo(-7,-8); cx.lineTo(-3,0); cx.lineTo(-7,8); cx.closePath(); cx.fill();
   cx.fillStyle=col;
-  cx.beginPath(); cx.moveTo(16,0); cx.lineTo(-8,-9); cx.lineTo(-3,0); cx.lineTo(-8,9); cx.closePath(); cx.fill();
+  cx.beginPath(); cx.moveTo(11,0); cx.lineTo(-5,-6); cx.lineTo(-2,0); cx.lineTo(-5,6); cx.closePath(); cx.fill();
   cx.restore();
 }
 
@@ -1841,12 +1843,19 @@ function renderHUD(){
   if(world.final){
     txt(`CREW ${party.length}`, VW-5,4,10, party.length?'#39ff14':'#ff4f4f','right');
     const tl=Math.max(0,world.timer||0);
-    txt(narrow?`BUS ${Math.ceil(tl)}s`:`BUS LEAVES: ${Math.ceil(tl)}s`, VW/2, 4, 10,
+    txt(narrow?`BUS ${Math.ceil(tl)}s`:`BUS LEAVES: ${Math.ceil(tl)}s`, VW/2, 20, 10,
       tl<11 ? (Math.floor(G.t*4)%2?'#ff4f4f':'#fff') : '#f5d300', 'center');
   } else {
     const col= party.length>=need ? '#39ff14' : '#fff';
     txt(`FRIENDS ${party.length}/${need}`, VW-5,4,10,col,'right');
-    if(party.length===0){ txt('ALONE!', VW/2, 4, 10, Math.floor(G.t*4)%2?'#ff4f4f':'#fff','center'); }
+    if(party.length===0){ txt('ALONE!', VW/2, 20, 10, Math.floor(G.t*4)%2?'#ff4f4f':'#fff','center'); }
+  }
+  if(TOUCH){ // pause button, top centre of the HUD bar
+    cx.fillStyle='#ffffff1a'; cx.fillRect(VW/2-14,1,28,15);
+    cx.strokeStyle='#ffffff44'; cx.lineWidth=1; cx.strokeRect(VW/2-13.5,1.5,27,14);
+    cx.fillStyle='#fff';
+    if(G.paused){ cx.beginPath(); cx.moveTo(VW/2-3,4); cx.lineTo(VW/2+5,8.5); cx.lineTo(VW/2-3,13); cx.closePath(); cx.fill(); }
+    else { cx.fillRect(VW/2-5,4,3,9); cx.fillRect(VW/2+2,4,3,9); }
   }
 
   // active effects
@@ -2003,7 +2012,7 @@ function renderSelect(){
     txt('POWERUPS', tx2, ry-9, 9, '#f5d300');
     txt('totems & mysterious bags', tx2, ry+2, 7, '#ffffffcc'); }
 
-  txt('walls & crowds scatter half your crew · alone + hit = game over', VW/2, VH-11, VW<420?7:8, '#ffffff99','center');
+  txt('walls & crowds scatter half your crew · alone + hit = game over', VW/2, VW<420?VH-34:VH-11, VW<420?7:8, '#ffffff99','center');
 }
 
 function renderCutscene(){
