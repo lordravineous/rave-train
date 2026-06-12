@@ -329,7 +329,7 @@ let effects={};          // active powerups id->timeLeft
 let exitGate=null, exitArrowT=0;
 let transition=null, cutscene=null, flashT=0, gameOverInfo=null;
 let phone=null, friendDryT=0;   // group-chat intro · seconds since last friend found
-let winT=0, winCrew=0, winPals=[], winNames=[];   // victory screen
+let winT=0, winCrew=0, winPals=[], winNames=[], winTime=0;   // victory screen
 // the roll-call of ravers who made it on the bus
 const RAVER_NAMES=[
  'Jennifer','Michelle','Amy','Grace','Emily','Jessica','Jenny','Vivian','Stephanie',
@@ -1165,6 +1165,7 @@ function update(dt){
     sfx('exit');
     if(world.final){
       winCrew=party.length; winT=0;
+      winTime=clamp(30-(world.timer||0), 0, 30);   // elapsed run time — the leaderboard stat
       winPals=[CHARS[G.charIdx], ...party.map(p=>p.pal)];
       // one name per person on the bus — you first, then random unique picks
       const me=CHARS[G.charIdx].name.split(' ')[0];
@@ -1891,7 +1892,7 @@ function renderHUD(){
   if(world.final){
     txt(`CREW ${party.length}/${world.crewMax||18}`, VW-5,4,10, party.length?'#39ff14':'#ff4f4f','right');
     const tl=Math.max(0,world.timer||0);
-    txt(narrow?`BUS ${Math.ceil(tl)}s`:`BUS LEAVES: ${Math.ceil(tl)}s`, VW/2, 20, 10,
+    txt(narrow?`BUS ${tl.toFixed(2)}s`:`BUS LEAVES: ${tl.toFixed(2)}s`, VW/2, 20, 10,
       tl<11 ? (Math.floor(G.t*4)%2?'#ff4f4f':'#fff') : '#f5d300', 'center');
   } else {
     const col= party.length>=need ? '#39ff14' : '#fff';
@@ -2212,7 +2213,7 @@ function renderWin(){
   txtT('YOU CAUGHT', VW/2, VH/2-118, nw?14:18, '#39ff14','center');
   txtT('THE LAST SHUTTLE!', VW/2, VH/2-96, nw?14:18, '#39ff14','center');
   txt('kick ons at your hotel!!', VW/2, VH/2-73, 11, '#2de2e6','center');
-  txt(`${winCrew} RAVERS MADE IT ON THE BUS`, VW/2, VH/2-49, nw?9:11, '#f5d300','center');
+  txt(`${winCrew} RAVERS MADE IT ON THE BUS IN ${winTime.toFixed(2)}s`, VW/2, VH/2-49, nw?8:11, '#f5d300','center');
   txt('THANKS FOR RAVING', VW/2, VH/2+80, 9, '#ffffff88','center');
   if(Math.floor(G.t*2)%2) txt(TOUCH?'TAP FOR ONE MORE RAVE':'PRESS SPACE FOR ONE MORE RAVE', VW/2, VH/2+100, 10, '#fff','center');
 }
